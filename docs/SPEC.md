@@ -6,6 +6,10 @@ scraped from the linked pages.
 
 **Status:** design draft. No implementation yet.
 
+**Implementation:** the interface decisions this document leaves open — CLI,
+config, identity rules, exact Tier 2 syntax, manifest schema, and v0 acceptance
+criteria — are pinned down in [`docs/IMPLEMENTATION-v0.md`](IMPLEMENTATION-v0.md).
+
 ---
 
 ## 1. Why this exists
@@ -155,7 +159,7 @@ bookmark with none renders fine at tier 0.
 |---|---|---|
 | **0** | tag + title + URL | A valid card. Guaranteed. Content of the notes is prose. |
 | **1** | facet tags | Cheap grouping and filtering |
-| **2** | a fenced YAML block in the notes | Per-item overrides: `price`, `variant`, `image`, `priority`, `store` |
+| **2** | a fenced block in the notes, info string `wishlist` | Per-item overrides: `price`, `currency`, `variant`, `image`, `priority`, `store`. Exact syntax in §4.4.1. |
 
 Tier 0 is the floor and the promise. **Any bookmark tagged `wishlist` renders,
 regardless of structure, scrape result, or URL shape.** See §7.1.
@@ -164,6 +168,35 @@ Tier 2 exists as an escape hatch for the cases where derivation fails or the
 human simply knows better — a hand-entered price for a shop with no product page,
 a display name for a store collection, an explicit priority ordering that
 Linkding does not model.
+
+#### 4.4.1 Tier 2 syntax
+
+A fenced code block in the notes whose **info string is exactly `wishlist`**
+(case-insensitive):
+
+````
+```wishlist
+store: Seven Sisters
+priority: 1
+variant: small, green
+```
+````
+
+The info string is deliberate. A bare ```` ```yaml ```` block would collide with
+YAML a note may contain for unrelated reasons; naming the fence makes the contract
+unambiguous to both the parser and a human reading the note.
+
+Rules:
+
+- The **first** block with that info string is the override block; later ones are
+  ignored.
+- The block may appear anywhere in the notes.
+- Recognized keys: `store`, `priority`, `price`, `currency`, `variant`, `image`.
+- **A malformed block is never fatal.** It renders the item at tier 0/1 with a
+  warning. A bad override downgrades an item; it never removes one.
+
+The authoritative field-by-field specification, including types and failure
+behavior, lives in [`IMPLEMENTATION-v0.md`](IMPLEMENTATION-v0.md) §5.
 
 ### 4.5 Read-only against Linkding
 
@@ -182,7 +215,8 @@ Item ID is derived from the bookmark URL (see §4.7 for fragment handling).
 
 Identity must be stable across builds so that the deferred claims layer (§9) can
 key against it. Identity is *not* required to survive arbitrary edits by the user;
-see §4.8.
+the ID derives from the URL, so renaming a bookmark's title or rewriting its notes
+leaves the ID untouched, while editing the URL itself yields a new item.
 
 ### 4.7 The URL-identity collision
 
