@@ -203,8 +203,8 @@ Routes, in preference order:
    so Linkding stores it as a separate bookmark, and the fragment survives as the
    distinguishing identity. This is an honest hack: following the link lands on
    the shop page, not the item.
-   **Must be verified against the live instance** — some bookmark tools normalize
-   fragments away. Do this before depending on the mechanism.
+   **Must be verified against the live instance** — see §4.7.1. Do this before
+   depending on the mechanism.
 3. **Decline to represent it.** If a want cannot be pinned to a URL even loosely,
    it does not belong in this application. Local browsing wants stay in vault
    notes. Not everything has to move.
@@ -217,6 +217,42 @@ Consequences of fragments:
   fragment-differentiated wants collide.
 - **Cache by URL minus fragment**, so several wants at one shop cost one page
   fetch.
+
+### 4.7.1 The fragment test
+
+Whether route 2 works is a property of *the specific Linkding instance's* config
+and version. Nobody can answer it from the outside; it must be tested.
+
+There are **two distinct questions**, and only the second one decides anything.
+They are easy to conflate:
+
+1. **Storage fidelity.** Does the fragment survive in the stored `url` string?
+2. **Dedupe key.** Does Linkding treat `shop.com/#a` and `shop.com/#b` as the
+   *same* bookmark or as *different* ones?
+
+**Test 1 can pass while test 2 fails** — the fragment could be stored faithfully
+while the duplicate check runs against a normalized key. In that case the second
+bookmark silently merges into or overwrites the first, and a want disappears with
+no error. That is the dangerous failure, and it is invisible if only the returned
+URL is inspected.
+
+**Procedure.**
+
+1. Save a bookmark for `https://example.com/foo#frag-test-one`.
+2. Read it back through the API (`GET /api/bookmarks/?q=frag-test`, or by ID).
+   Compare the returned `url` to what was submitted, character for character.
+   This answers test 1.
+3. Save a second bookmark: `https://example.com/foo#frag-test-two`.
+4. Re-query and count. **Two results means fragments are part of the identity key
+   and route 2 works. One result, whose URL has changed, means fragments are
+   normalized away and route 2 is dead.**
+
+Step 4 is the verdict; step 2 only reports whether the string survives a round
+trip.
+
+**If route 2 is dead**, routes 1 and 3 remain: use real product URLs, or decline
+to represent the want and leave it in vault notes. The application gets smaller
+but is not broken — the fragment was always a concession.
 
 ---
 
@@ -448,9 +484,9 @@ Out of scope for v1. Not to be stubbed, not to be scaffolded, not to be
 
 ## 10. Open questions
 
-1. **Does Linkding preserve URL fragments, or normalize them away?** Must be
-   tested against the live instance before §4.7 route 2 can be relied upon. Cheap
-   test: save one fragment URL, read it back through the API, compare strings.
+1. **Does Linkding preserve URL fragments, and does it use them in the duplicate
+   key?** Two separate questions — see §4.7.1 for the procedure. Blocks §4.7
+   route 2 only; routes 1 and 3 are unaffected.
 2. **Ordering.** Linkding has no priority field. Start with facet plus
    `date_added`; add explicit ordering only through the Tier 2 override.
 3. **Scraper politeness specifics** — per-domain rate limits, retry policy, and
