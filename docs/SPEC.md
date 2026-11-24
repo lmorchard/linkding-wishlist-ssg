@@ -544,3 +544,4 @@ Out of scope for v1. Not to be stubbed, not to be scaffolded, not to be
 | 2026-11-21 | `wishlist` always means item; resilience is the system's job, discipline is the user's |
 | 2026-11-21 | Rendering fails open; lint suggests but never suppresses |
 | 2026-11-21 | Lint reports to stdout, never to a file; lint never writes to Linkding |
+| 2026-11-24 | Optional `.env` credential file; process environment wins |

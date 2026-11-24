@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/cluster"
+	"github.com/lmorchard/linkding-wishlist-ssg/internal/config"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/identity"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/linkding"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/lint"
@@ -26,7 +27,8 @@ import (
 type application struct {
 	stdout        io.Writer
 	stderr        io.Writer
-	getenv        func(string) string
+	lookupEnv     func(string) (string, bool)
+	envFilePath   string
 	now           func() time.Time
 	httpClient    *http.Client
 	retryBackoffs []time.Duration
@@ -68,6 +70,9 @@ Flags:
 Environment:
   LINKDING_URL             Linkding base URL, no trailing slash
   LINKDING_TOKEN           Linkding API token
+
+  A .env file in the current directory is loaded if present. Existing
+  environment variables take precedence over values from .env.
 `)
 }
 
@@ -77,6 +82,7 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), "Usage: linkding-wishlist-ssg build [flags]\n\nFlags:\n")
 		fs.PrintDefaults()
+		fmt.Fprint(fs.Output(), "\nCredentials come from LINKDING_URL and LINKDING_TOKEN, or from a .env\nfile in the current directory. The process environment wins.\n")
 	}
 
 	outDir := fs.String("out", "./build", "output directory; created if absent, wiped if present")
@@ -111,14 +117,24 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 		return 1
 	}
 
-	linkdingURL := strings.TrimSpace(a.getenv("LINKDING_URL"))
+	envFile := map[string]string{}
+	if a.envFilePath != "" {
+		loaded, err := config.LoadEnv(a.envFilePath)
+		if err != nil {
+			fmt.Fprintf(a.stderr, "warning: reading %s: %v\n", a.envFilePath, err)
+		} else {
+			envFile = loaded
+		}
+	}
+
+	linkdingURL := strings.TrimSpace(a.envValue(envFile, "LINKDING_URL"))
 	if linkdingURL == "" {
-		fmt.Fprintln(a.stderr, "error: LINKDING_URL is required (set it to your Linkding base URL)")
+		fmt.Fprintln(a.stderr, "error: LINKDING_URL is required (set it in the environment or .env)")
 		return 1
 	}
-	linkdingToken := strings.TrimSpace(a.getenv("LINKDING_TOKEN"))
+	linkdingToken := strings.TrimSpace(a.envValue(envFile, "LINKDING_TOKEN"))
 	if linkdingToken == "" {
-		fmt.Fprintln(a.stderr, "error: LINKDING_TOKEN is required (set it to your Linkding API token)")
+		fmt.Fprintln(a.stderr, "error: LINKDING_TOKEN is required (set it in the environment or .env)")
 		return 1
 	}
 
@@ -230,6 +246,17 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 
 func (a *application) progress(fetched, total int) {
 	fmt.Fprintf(a.stdout, "  fetched %d/%d\n", fetched, total)
+}
+
+// envValue returns the process environment value when the variable is set,
+// even to an empty string. Values from .env are only a fallback.
+func (a *application) envValue(fileValues map[string]string, key string) string {
+	if a.lookupEnv != nil {
+		if value, ok := a.lookupEnv(key); ok {
+			return value
+		}
+	}
+	return fileValues[key]
 }
 
 func wantsHelp(args []string) bool {

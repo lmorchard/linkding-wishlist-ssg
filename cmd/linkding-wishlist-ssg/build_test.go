@@ -91,14 +91,14 @@ func newTestApp(linkdingURL string) (*application, *bytes.Buffer, *bytes.Buffer)
 	return &application{
 		stdout: stdout,
 		stderr: stderr,
-		getenv: func(key string) string {
+		lookupEnv: func(key string) (string, bool) {
 			switch key {
 			case "LINKDING_URL":
-				return linkdingURL
+				return linkdingURL, true
 			case "LINKDING_TOKEN":
-				return "test-token"
+				return "test-token", true
 			default:
-				return ""
+				return "", false
 			}
 		},
 		now:           func() time.Time { return fixedNow },
@@ -317,6 +317,105 @@ func TestBuildIncludeArchived(t *testing.T) {
 	}
 }
 
+func TestBuildLoadsCredentialsFromEnvFile(t *testing.T) {
+	server, _ := startFixtureServer(t)
+	dir := t.TempDir()
+	envPath := filepath.Join(dir, ".env")
+	content := "# credentials\nLINKDING_URL=" + server.URL + "\nLINKDING_TOKEN=from-file\n"
+	if err := os.WriteFile(envPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	app := &application{
+		stdout:        stdout,
+		stderr:        stderr,
+		lookupEnv:     func(string) (string, bool) { return "", false },
+		envFilePath:   envPath,
+		now:           func() time.Time { return fixedNow },
+		httpClient:    &http.Client{Timeout: 2 * time.Second},
+		retryBackoffs: []time.Duration{},
+	}
+	outDir := filepath.Join(dir, "site")
+
+	if exit := runBuild(t, app, "--out", outDir); exit != 0 {
+		t.Fatalf("exit = %d, stderr:\n%s", exit, stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "manifest.json")); err != nil {
+		t.Fatalf("build did not use .env credentials: %v", err)
+	}
+	if strings.Contains(stderr.String(), "error:") {
+		t.Fatalf("stderr has an error:\n%s", stderr.String())
+	}
+}
+
+func TestBuildProcessEnvironmentOverridesEnvFile(t *testing.T) {
+	server, _ := startFixtureServer(t)
+	dir := t.TempDir()
+	envPath := filepath.Join(dir, ".env")
+	content := "LINKDING_URL=http://127.0.0.1:1\nLINKDING_TOKEN=from-file\n"
+	if err := os.WriteFile(envPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	app := &application{
+		stdout: stdout,
+		stderr: stderr,
+		lookupEnv: func(key string) (string, bool) {
+			switch key {
+			case "LINKDING_URL":
+				return server.URL, true
+			case "LINKDING_TOKEN":
+				return "from-environment", true
+			default:
+				return "", false
+			}
+		},
+		envFilePath:   envPath,
+		now:           func() time.Time { return fixedNow },
+		httpClient:    &http.Client{Timeout: 2 * time.Second},
+		retryBackoffs: []time.Duration{},
+	}
+	outDir := filepath.Join(dir, "site")
+
+	if exit := runBuild(t, app, "--out", outDir); exit != 0 {
+		t.Fatalf("exit = %d, stderr:\n%s", exit, stderr.String())
+	}
+}
+
+func TestBuildMissingEnvFileFallsBackToProcessEnvironment(t *testing.T) {
+	server, _ := startFixtureServer(t)
+	app, _, stderr := newTestApp(server.URL)
+	app.envFilePath = filepath.Join(t.TempDir(), "absent.env")
+	outDir := filepath.Join(t.TempDir(), "site")
+
+	if exit := runBuild(t, app, "--out", outDir); exit != 0 {
+		t.Fatalf("exit = %d, stderr:\n%s", exit, stderr.String())
+	}
+}
+
+func TestBuildUnreadableEnvFileWarnsAndUsesProcessEnvironment(t *testing.T) {
+	server, _ := startFixtureServer(t)
+	envPath := filepath.Join(t.TempDir(), ".env")
+	if err := os.Mkdir(envPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	app, _, stderr := newTestApp(server.URL)
+	app.envFilePath = envPath
+	outDir := filepath.Join(t.TempDir(), "site")
+
+	if exit := runBuild(t, app, "--out", outDir); exit != 0 {
+		t.Fatalf("exit = %d, stderr:\n%s", exit, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "warning: reading") {
+		t.Fatalf("stderr missing .env read warning:\n%s", stderr.String())
+	}
+}
+
 func TestBuildFailsWithoutCredentials(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -343,8 +442,11 @@ func TestBuildFailsWithoutCredentials(t *testing.T) {
 			app := &application{
 				stdout: stdout,
 				stderr: stderr,
-				getenv: func(key string) string { return tt.env[key] },
-				now:    func() time.Time { return fixedNow },
+				lookupEnv: func(key string) (string, bool) {
+					value, ok := tt.env[key]
+					return value, ok
+				},
+				now: func() time.Time { return fixedNow },
 			}
 
 			if exit := runBuild(t, app, "--out", outDir); exit != 1 {

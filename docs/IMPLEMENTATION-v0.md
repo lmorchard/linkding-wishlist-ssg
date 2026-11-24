@@ -31,7 +31,9 @@ Nothing below may be stubbed, scaffolded, or "prepared for":
 - Images, thumbnails, or OpenGraph metadata.
 - Pagefind, client-side search, or any full-text index.
 - Gift claims, the progressive-enhancement overlay, or any KV service.
-- A configuration file. Flags and environment variables only.
+- A general-purpose configuration file. Flags and environment variables only;
+  the one exception is an optional `.env` file supplying the two credential
+  variables (§3).
 - Multi-retailer wants (`wishlist:want:<slug>`), per spec §5.5.
 
 **Rationale for the scraping cut:** SPEC.md §7.1 requires rendering to fail open
@@ -106,8 +108,14 @@ From the environment, matching the convention already used by the
 - `LINKDING_URL` — base URL of the instance, no trailing slash
 - `LINKDING_TOKEN` — API token
 
-Missing either is a fatal error with a clear message. Never accept a token as a
-flag; it would land in shell history and process listings.
+An optional `.env` file in the working directory may supply the same two
+variables. Process environment variables always win, even when set to an empty
+string; `.env` is only a fallback. The file accepts blank lines, `#` comments,
+an optional `export ` prefix, and single- or double-quoted values. It is a
+credential file, not a general configuration file.
+
+Missing either variable is a fatal error with a clear message. Never accept a
+token as a flag; it would land in shell history and process listings.
 
 ### Streams and exit codes
 
@@ -436,6 +444,9 @@ The build is done when all of the following pass.
 11. The lint report appears on stdout and `manifest.json` contains no lint data.
 12. **ID stability:** run the build twice against the same fixtures. The two
     manifests are byte-identical except for `generated_at`.
+13. **`.env` credentials:** with `LINKDING_URL` and `LINKDING_TOKEN` supplied
+    only by `.env`, the build exits 0. With both `.env` and the process
+    environment set, the process environment wins.
 
 ### 10.2 Tests
 

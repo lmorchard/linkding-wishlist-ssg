@@ -22,9 +22,6 @@ make build
 ## Run
 
 ```sh
-export LINKDING_URL="https://links.example.com"
-export LINKDING_TOKEN="..."
-
 ./linkding-wishlist-ssg build --out ./build
 ```
 
@@ -38,6 +35,34 @@ store/<store-key>/index.html
 facet/<facet-name>/index.html
 ```
 
+## Configuration
+
+Credentials come from the process environment or an optional `.env` file in
+the working directory. The token is never accepted as a flag.
+
+| Variable | Meaning |
+|---|---|
+| `LINKDING_URL` | Linkding base URL, e.g. `https://links.example.com` |
+| `LINKDING_TOKEN` | API token from Linkding **Settings → Integrations** |
+
+Export them:
+
+```sh
+export LINKDING_URL="https://links.example.com"
+export LINKDING_TOKEN="..."
+```
+
+Or put them in `.env`:
+
+```sh
+LINKDING_URL=https://links.example.com
+LINKDING_TOKEN=your-token
+```
+
+Existing environment variables take precedence over `.env`; the file is only a
+fallback. Blank lines and `#` comments are ignored. An optional `export ` prefix
+and single or double quotes around values are accepted. `.env` is gitignored.
+
 ## Flags
 
 | Flag | Default | Meaning |
@@ -48,9 +73,6 @@ facet/<facet-name>/index.html
 | `--include-archived` | `false` | Include archived bookmarks (debugging only) |
 | `--lint-format` | `text` | `text` or `json`; both go to stdout |
 | `--no-lint` | `false` | Suppress the lint report |
-
-Credentials come only from `LINKDING_URL` and `LINKDING_TOKEN`. The token is
-never accepted as a flag.
 
 ## Tier 2 overrides
 
