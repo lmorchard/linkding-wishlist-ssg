@@ -1,0 +1,15 @@
+{{define "index"}}{{template "head" .}}
+<h1>{{.Heading}}</h1>
+{{if .Facets}}<nav class="facets">
+<h2>Facets</h2>
+<ul>
+{{range .Facets}}<li><a href="{{.Href}}">{{.Name}}</a></li>
+{{end}}</ul>
+</nav>
+{{end}}{{range .Sections}}<section class="store">
+<h2><a href="{{.Href}}">{{.Label}}</a></h2>
+<div class="cards">
+{{range .Cards}}{{template "card" .}}
+{{end}}</div>
+</section>
+{{end}}{{template "footer" .}}{{end}}

@@ -4,11 +4,10 @@ A static site generator that turns a set of [Linkding](https://linkding.link/)
 bookmarks into a browsable wishlist, enriched with whatever product data can be
 scraped from the linked pages.
 
-**Status:** design draft. No implementation yet.
-
-**Implementation:** the interface decisions this document leaves open — CLI,
-config, identity rules, exact Tier 2 syntax, manifest schema, and v0 acceptance
-criteria — are pinned down in [`docs/IMPLEMENTATION-v0.md`](IMPLEMENTATION-v0.md).
+**Status:** v0 implemented. The interface decisions this document leaves open —
+CLI, config, identity rules, exact Tier 2 syntax, manifest schema, and v0
+acceptance criteria — are pinned down in
+[`docs/IMPLEMENTATION-v0.md`](IMPLEMENTATION-v0.md).
 
 ---
 

@@ -1,0 +1,224 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-11-21T12:00:00Z",
+  "source": {
+    "tag": "wishlist",
+    "base_url": "/"
+  },
+  "items": [
+    {
+      "id": "7f86e654f4ba",
+      "url": "https://www.sevensisterspdx.com/",
+      "title": "Seven Sisters",
+      "description": "",
+      "notes": "Local shop. The salt bowl is the thing.\n\n```wishlist\nstore: Seven Sisters\nprice: 42.00\ncurrency: USD\npriority: 1\nvariant: small, green\n```",
+      "tags": [
+        "wishlist"
+      ],
+      "facets": [],
+      "store_key": "sevensisterspdx.com",
+      "store_label": "Seven Sisters",
+      "added_at": "2026-11-01T09:14:22Z",
+      "modified_at": "2026-11-01T09:14:22Z",
+      "archived": false,
+      "overrides": {
+        "store": "Seven Sisters",
+        "priority": 1,
+        "price": 42,
+        "currency": "USD",
+        "variant": "small, green"
+      }
+    },
+    {
+      "id": "9fb7265b91c2",
+      "url": "https://bookshop.org/books/second-priority",
+      "title": "Second Priority",
+      "description": "",
+      "notes": "```wishlist\npriority: 2\n```",
+      "tags": [
+        "wishlist",
+        "wishlist:book"
+      ],
+      "facets": [
+        "book"
+      ],
+      "store_key": "bookshop.org",
+      "store_label": "bookshop.org",
+      "added_at": "2026-11-06T10:00:00Z",
+      "modified_at": "2026-11-06T10:00:00Z",
+      "archived": false,
+      "overrides": {
+        "priority": 2
+      }
+    },
+    {
+      "id": "4fcb01c47e28",
+      "url": "https://www.sevensisterspdx.com/shop/sardine-head-salt-bowl",
+      "title": "Sardine Head Salt Bowl",
+      "description": "",
+      "notes": "Ask at the counter.",
+      "tags": [
+        "wishlist",
+        "wishlist:kitchen"
+      ],
+      "facets": [
+        "kitchen"
+      ],
+      "store_key": "sevensisterspdx.com",
+      "store_label": "Seven Sisters",
+      "added_at": "2026-11-05T10:00:00Z",
+      "modified_at": "2026-11-05T10:00:00Z",
+      "archived": false
+    },
+    {
+      "id": "8ebee59c9743",
+      "url": "https://example.com/malformed",
+      "title": "Malformed Override",
+      "description": "",
+      "notes": "```wishlist\nstore: [broken\n```",
+      "tags": [
+        "wishlist",
+        "wishlist:book"
+      ],
+      "facets": [
+        "book"
+      ],
+      "store_key": "example.com",
+      "store_label": "example.com",
+      "added_at": "2026-11-04T10:00:00Z",
+      "modified_at": "2026-11-04T10:00:00Z",
+      "archived": false
+    },
+    {
+      "id": "6d2f68d82922",
+      "url": "https://example.com/a-book",
+      "title": "",
+      "description": "",
+      "notes": "",
+      "tags": [
+        "wishlist",
+        "wishlist:book"
+      ],
+      "facets": [
+        "book"
+      ],
+      "store_key": "example.com",
+      "store_label": "example.com",
+      "added_at": "2026-11-03T10:00:00Z",
+      "modified_at": "2026-11-03T10:00:00Z",
+      "archived": false
+    },
+    {
+      "id": "1d797314e542",
+      "url": "https://bookshop.org/books/the-book",
+      "title": "The Book",
+      "description": "A novel",
+      "notes": "A novel I want in hardcover.",
+      "tags": [
+        "wishlist",
+        "wishlist:book:fiction"
+      ],
+      "facets": [
+        "book"
+      ],
+      "store_key": "bookshop.org",
+      "store_label": "bookshop.org",
+      "added_at": "2026-11-02T10:00:00Z",
+      "modified_at": "2026-11-02T10:00:00Z",
+      "archived": false
+    },
+    {
+      "id": "3cbaea5b5bab",
+      "url": "http://[::1",
+      "title": "Broken URL",
+      "description": "",
+      "notes": "",
+      "tags": [
+        "wishlist",
+        "wishlist:book"
+      ],
+      "facets": [
+        "book"
+      ],
+      "store_key": "unknown",
+      "store_label": "unknown",
+      "added_at": "2026-09-02T10:00:00Z",
+      "modified_at": "2026-09-02T10:00:00Z",
+      "archived": false
+    },
+    {
+      "id": "0f115db062b7",
+      "url": "https://example.com/",
+      "title": "example.com",
+      "description": "",
+      "notes": "",
+      "tags": [
+        "wishlist"
+      ],
+      "facets": [],
+      "store_key": "example.com",
+      "store_label": "example.com",
+      "added_at": "2026-09-01T10:00:00Z",
+      "modified_at": "2026-09-01T10:00:00Z",
+      "archived": false
+    }
+  ],
+  "stores": [
+    {
+      "key": "bookshop.org",
+      "label": "bookshop.org",
+      "path": "/store/bookshop.org/",
+      "item_ids": [
+        "9fb7265b91c2",
+        "1d797314e542"
+      ]
+    },
+    {
+      "key": "example.com",
+      "label": "example.com",
+      "path": "/store/example.com/",
+      "item_ids": [
+        "8ebee59c9743",
+        "6d2f68d82922",
+        "0f115db062b7"
+      ]
+    },
+    {
+      "key": "sevensisterspdx.com",
+      "label": "Seven Sisters",
+      "path": "/store/sevensisterspdx.com/",
+      "item_ids": [
+        "7f86e654f4ba",
+        "4fcb01c47e28"
+      ]
+    },
+    {
+      "key": "unknown",
+      "label": "unknown",
+      "path": "/store/unknown/",
+      "item_ids": [
+        "3cbaea5b5bab"
+      ]
+    }
+  ],
+  "facets": [
+    {
+      "name": "book",
+      "path": "/facet/book/",
+      "item_ids": [
+        "9fb7265b91c2",
+        "8ebee59c9743",
+        "6d2f68d82922",
+        "1d797314e542",
+        "3cbaea5b5bab"
+      ]
+    },
+    {
+      "name": "kitchen",
+      "path": "/facet/kitchen/",
+      "item_ids": [
+        "4fcb01c47e28"
+      ]
+    }
+  ]
+}
