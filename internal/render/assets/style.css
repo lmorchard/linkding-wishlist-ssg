@@ -125,9 +125,94 @@ h2 a {
   margin-bottom: 0.5rem;
 }
 
+.back a + a {
+  margin-left: 0.75rem;
+}
+
 .site-footer {
   border-top: 1px solid var(--border);
   color: var(--muted);
   font-size: 0.85rem;
   padding: 1.25rem;
+}
+
+.views,
+.months {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  font-size: 0.9rem;
+  margin: 0 0 1.5rem;
+}
+
+.views-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.day h2 {
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.run {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  margin: 0 0 0.9rem;
+}
+
+.run > summary {
+  cursor: pointer;
+  padding: 0.6rem 0.9rem;
+}
+
+.run-store {
+  color: var(--fg);
+  font-weight: 650;
+}
+
+.run-count,
+.run-range {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.run-count::before,
+.run-range::before {
+  content: "· ";
+  color: var(--muted);
+}
+
+.run[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.run .cards {
+  padding: 0.9rem;
+}
+
+.store-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.store-list li {
+  align-items: baseline;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+}
+
+.store-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }

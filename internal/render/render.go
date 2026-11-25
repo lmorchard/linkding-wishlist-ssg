@@ -49,12 +49,16 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 	files["assets/style.css"] = css
 
 	base := opts.BaseURL
+	archives := buildArchives(dataset.Items)
+
 	view := pageView{
-		Title:    "Wishlist",
-		Heading:  "Wishlist",
-		CSSHref:  joinBase(base, "/assets/style.css"),
-		HomeHref: joinBase(base, "/"),
-		Tag:      opts.Tag,
+		Title:      "Wishlist",
+		Heading:    "Wishlist",
+		CSSHref:    joinBase(base, "/assets/style.css"),
+		HomeHref:   joinBase(base, "/"),
+		StoresHref: joinBase(base, "/stores/"),
+		Tag:        opts.Tag,
+		Days:       buildDays(dataset.Items, storePaths, base),
 	}
 	for _, facet := range dataset.Facets {
 		view.Facets = append(view.Facets, facetLinkView{
@@ -62,19 +66,11 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 			Href: joinBase(base, facet.Path),
 		})
 	}
-	for _, store := range dataset.Stores {
-		section := sectionView{
-			Label: store.Label,
-			Href:  joinBase(base, store.Path),
-		}
-		for _, id := range store.ItemIDs {
-			item, ok := itemsByID[id]
-			if !ok {
-				continue
-			}
-			section.Cards = append(section.Cards, cardFor(item, storePaths, base))
-		}
-		view.Sections = append(view.Sections, section)
+	for _, year := range archives {
+		view.Years = append(view.Years, linkView{
+			Label: strconv.Itoa(year.Year),
+			Href:  joinBase(base, archiveYearPath(year.Year)),
+		})
 	}
 
 	indexHTML, err := execute(tmpl, "index", view)
@@ -127,6 +123,65 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 		files[fileForPath(facet.Path, "/facet/"+escapeSegment(facet.Name)+"/")] = page
 	}
 
+	storesView := pageView{
+		Title:    "Stores — Wishlist",
+		Heading:  "Stores",
+		CSSHref:  joinBase(base, "/assets/style.css"),
+		HomeHref: joinBase(base, "/"),
+		Tag:      opts.Tag,
+		Stores:   buildStoreLinks(dataset.Stores, base),
+	}
+	storesHTML, err := execute(tmpl, "stores", storesView)
+	if err != nil {
+		return nil, err
+	}
+	files["stores/index.html"] = storesHTML
+
+	for _, year := range archives {
+		yearView := pageView{
+			Title:    fmt.Sprintf("%d — Wishlist", year.Year),
+			Heading:  strconv.Itoa(year.Year),
+			CSSHref:  joinBase(base, "/assets/style.css"),
+			HomeHref: joinBase(base, "/"),
+			Tag:      opts.Tag,
+		}
+		yearItems := make([]model.Item, 0)
+		for _, month := range year.Months {
+			yearView.Months = append(yearView.Months, linkView{
+				Label: monthLabel(month.Year, month.Month),
+				Href:  joinBase(base, archiveMonthPath(month.Year, month.Month)),
+			})
+			yearItems = append(yearItems, month.Items...)
+		}
+		yearView.Days = buildDays(yearItems, storePaths, base)
+
+		yearPath := archiveYearPath(year.Year)
+		yearHTML, err := execute(tmpl, "archive", yearView)
+		if err != nil {
+			return nil, err
+		}
+		files[fileForPath(yearPath, yearPath)] = yearHTML
+
+		for _, month := range year.Months {
+			monthView := pageView{
+				Title:     monthLabel(month.Year, month.Month) + " — Wishlist",
+				Heading:   monthLabel(month.Year, month.Month),
+				CSSHref:   joinBase(base, "/assets/style.css"),
+				HomeHref:  joinBase(base, "/"),
+				Tag:       opts.Tag,
+				YearHref:  joinBase(base, archiveYearPath(year.Year)),
+				YearLabel: strconv.Itoa(year.Year),
+				Days:      buildDays(month.Items, storePaths, base),
+			}
+			monthPath := archiveMonthPath(month.Year, month.Month)
+			monthHTML, err := execute(tmpl, "archive", monthView)
+			if err != nil {
+				return nil, err
+			}
+			files[fileForPath(monthPath, monthPath)] = monthHTML
+		}
+	}
+
 	return files, nil
 }
 
@@ -136,15 +191,18 @@ type pageView struct {
 	CSSHref  string
 	HomeHref string
 	Tag      string
-	Sections []sectionView
-	Facets   []facetLinkView
-	Cards    []cardView
-}
 
-type sectionView struct {
-	Label string
-	Href  string
-	Cards []cardView
+	Facets []facetLinkView
+	Cards  []cardView
+
+	Days   []dayView
+	Stores []storeLinkView
+	Years  []linkView
+	Months []linkView
+
+	StoresHref string
+	YearHref   string
+	YearLabel  string
 }
 
 type facetLinkView struct {
@@ -163,16 +221,11 @@ type cardView struct {
 }
 
 func cardFor(item model.Item, storePaths map[string]string, base string) cardView {
-	storePath, ok := storePaths[item.StoreKey]
-	if !ok {
-		storePath = "/store/" + escapeSegment(item.StoreKey) + "/"
-	}
-
 	card := cardView{
 		Title:      item.DisplayTitle(),
 		URL:        item.URL,
 		StoreLabel: item.StoreLabel,
-		StoreHref:  joinBase(base, storePath),
+		StoreHref:  joinBase(base, storePathFor(item, storePaths)),
 		Archived:   item.Archived,
 	}
 	if card.StoreLabel == "" {

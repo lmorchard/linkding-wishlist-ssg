@@ -17,9 +17,9 @@ func TestRulesFireAndDoNotFire(t *testing.T) {
 		want []string
 	}{
 		{
-			name: "no facet fires",
+			name: "facet absent does not fire",
 			item: model.Item{ID: "a", URL: "https://example.com/a/b", Tags: []string{"wishlist"}},
-			want: []string{CodeNoFacet},
+			want: nil,
 		},
 		{
 			name: "facet present does not fire",
@@ -37,14 +37,14 @@ func TestRulesFireAndDoNotFire(t *testing.T) {
 			want: []string{CodeShallowPath},
 		},
 		{
-			name: "single segment is shallow",
+			name: "single segment is not shallow",
 			item: model.Item{ID: "a", URL: "https://example.com/shop", Facets: []string{"book"}},
-			want: []string{CodeShallowPath},
+			want: nil,
 		},
 		{
-			name: "single segment with slash is shallow",
+			name: "single segment with slash is not shallow",
 			item: model.Item{ID: "a", URL: "https://example.com/shop/", Facets: []string{"book"}},
-			want: []string{CodeShallowPath},
+			want: nil,
 		},
 		{
 			name: "two segments are not shallow",
@@ -74,7 +74,7 @@ func TestRulesFireAndDoNotFire(t *testing.T) {
 		{
 			name: "multiple codes are ordered",
 			item: model.Item{ID: "a", URL: "https://example.com/", Title: "example.com"},
-			want: []string{CodeNoFacet, CodeShallowPath, CodeTitleMatchesHost},
+			want: []string{CodeShallowPath, CodeTitleMatchesHost},
 		},
 	}
 
@@ -121,9 +121,9 @@ func TestWriteText(t *testing.T) {
 		},
 		{
 			ID:          "b2c3d4e5f6a1",
-			URL:         "https://example.com/a-book",
-			Codes:       []string{CodeNoFacet},
-			Suggestions: []string{suggestionNoFacet},
+			URL:         "https://example.com/",
+			Codes:       []string{CodeTitleMatchesHost},
+			Suggestions: []string{suggestionTitleMatchesHost},
 		},
 	}
 
@@ -135,8 +135,8 @@ func TestWriteText(t *testing.T) {
 	want := "lint: 2 item(s) look off\n" +
 		"  a1b2c3d4e5f6  https://www.sevensisterspdx.com/\n" +
 		"    shallow_path        consider: is this a store, not a want?\n" +
-		"  b2c3d4e5f6a1  https://example.com/a-book\n" +
-		"    no_facet            consider: retag wishlist:book\n"
+		"  b2c3d4e5f6a1  https://example.com/\n" +
+		"    title_matches_host  consider: is this a store, not a want?\n"
 	if buf.String() != want {
 		t.Fatalf("text report:\n%s\nwant:\n%s", buf.String(), want)
 	}
@@ -155,8 +155,8 @@ func TestWriteJSON(t *testing.T) {
 	if err := WriteJSON(&buf, []Finding{{
 		ID:          "a",
 		URL:         "https://example.com/",
-		Codes:       []string{CodeNoFacet},
-		Suggestions: []string{suggestionNoFacet},
+		Codes:       []string{CodeShallowPath},
+		Suggestions: []string{suggestionShallowPath},
 	}}); err != nil {
 		t.Fatal(err)
 	}

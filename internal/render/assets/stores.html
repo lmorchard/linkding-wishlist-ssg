@@ -1,0 +1,7 @@
+{{define "stores"}}{{template "head" .}}
+<nav class="back"><a href="{{.HomeHref}}">All items</a></nav>
+<h1>{{.Heading}}</h1>
+<ul class="store-list">
+{{range .Stores}}<li><a href="{{.Href}}">{{.Label}}</a> <span class="store-count">{{.CountLabel}}</span></li>
+{{end}}</ul>
+{{template "footer" .}}{{end}}

@@ -15,14 +15,12 @@ import (
 
 // Reason codes, in the order they are reported for an item.
 const (
-	CodeNoFacet          = "no_facet"
 	CodeShallowPath      = "shallow_path"
 	CodeTitleMatchesHost = "title_matches_host"
 	CodeUnparseableURL   = "unparseable_url"
 )
 
 const (
-	suggestionNoFacet          = "consider: retag wishlist:book"
 	suggestionShallowPath      = "consider: is this a store, not a want?"
 	suggestionTitleMatchesHost = "consider: is this a store, not a want?"
 	suggestionUnparseableURL   = "consider: check the URL"
@@ -61,10 +59,6 @@ func evaluate(item model.Item) ([]string, []string) {
 		suggestions = append(suggestions, suggestion)
 	}
 
-	if len(item.Facets) == 0 {
-		add(CodeNoFacet, suggestionNoFacet)
-	}
-
 	parsed, err := url.Parse(item.URL)
 	_, storeKeyOK := identity.StoreKey(item.URL)
 
@@ -85,8 +79,7 @@ func evaluate(item model.Item) ([]string, []string) {
 }
 
 func isShallowPath(path string) bool {
-	trimmed := strings.Trim(path, "/")
-	return !strings.Contains(trimmed, "/")
+	return path == "" || path == "/"
 }
 
 func titleMatchesHost(title, hostname, storeKey string) bool {

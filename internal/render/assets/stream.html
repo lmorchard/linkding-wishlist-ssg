@@ -1,0 +1,13 @@
+{{define "days"}}{{range .Days}}<section class="day">
+<h2>{{.Label}}</h2>
+{{range .Runs}}{{template "run" .}}{{end}}
+</section>
+{{end}}{{end}}
+
+{{define "run"}}<details class="run"{{if not .Collapsed}} open{{end}}>
+<summary><a class="run-store" href="{{.StoreHref}}">{{.StoreLabel}}</a> <span class="run-count">{{.CountLabel}}</span> <span class="run-range">{{.RangeLabel}}</span></summary>
+<div class="cards">
+{{range .Cards}}{{template "card" .}}
+{{end}}</div>
+</details>
+{{end}}
