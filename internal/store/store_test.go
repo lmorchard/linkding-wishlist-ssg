@@ -184,3 +184,53 @@ func TestIngestPreservesExistingQueueState(t *testing.T) {
 		t.Fatalf("point = %q after re-ingest, want %q", point, PointDone)
 	}
 }
+
+func TestDeadIsPermanentAndNotAStaleItem(t *testing.T) {
+	db := openTemp(t)
+	now := at("2026-11-24T12:00:00Z")
+	seed(t, db, []Item{
+		{ItemID: "gone", URL: "https://closed.example/a", Host: "closed.example", AddedAt: at("2009-01-01T00:00:00Z")},
+		{ItemID: "live", URL: "https://open.example/b", Host: "open.example", AddedAt: at("2026-11-01T00:00:00Z")},
+	})
+
+	if err := Record(db, Observation{ItemID: "gone", ObservedAt: now, Source: "none", Status: "dead", Detail: "http 404"}, OutcomeDead, now); err != nil {
+		t.Fatalf("Record dead: %v", err)
+	}
+
+	// A dead item must never come back, even a century later.
+	got, err := NextBatch(db, now.Add(50*365*24*time.Hour), 10, nil)
+	if err != nil {
+		t.Fatalf("NextBatch: %v", err)
+	}
+	for _, e := range got {
+		if e.ItemID == "gone" {
+			t.Fatal("a dead item was re-queued")
+		}
+	}
+	if len(got) != 1 || got[0].ItemID != "live" {
+		t.Fatalf("expected only the live item, got %v", got)
+	}
+
+	// The row survives so the item still renders on the site.
+	var point string
+	if err := db.QueryRow(`SELECT point FROM items WHERE item_id='gone'`).Scan(&point); err != nil {
+		t.Fatalf("reading dead item: %v", err)
+	}
+	if point != string(PointDead) {
+		t.Fatalf("point = %q, want %q", point, PointDead)
+	}
+
+	p, err := Summarise(db, RefreshAfter, now)
+	if err != nil {
+		t.Fatalf("Summarise: %v", err)
+	}
+	if p.Dead != 1 {
+		t.Errorf("Dead = %d, want 1", p.Dead)
+	}
+	if p.Failed != 0 {
+		t.Errorf("Failed = %d, want 0 — a 404 must not be counted as a retryable failure", p.Failed)
+	}
+	if p.Stale != 1 {
+		t.Errorf("Stale = %d, want 1 (only the live, never-observed item)", p.Stale)
+	}
+}
