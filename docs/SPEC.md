@@ -251,26 +251,34 @@ Consequences of fragments:
 - **Cache by URL minus fragment**, so several wants at one shop cost one page
   fetch.
 
-### 4.7.1 The fragment test
+### 4.7.1 The fragment test — RESOLVED
 
-Whether route 2 works is a property of *the specific Linkding instance's* config
-and version. Nobody can answer it from the outside; it must be tested.
+**Result (2026-11-24): fragments are part of the identity key. Route 2 works.**
 
-There are **two distinct questions**, and only the second one decides anything.
-They are easy to conflate:
+Both questions were answered against the live instance:
 
-1. **Storage fidelity.** Does the fragment survive in the stored `url` string?
-2. **Dedupe key.** Does Linkding treat `shop.com/#a` and `shop.com/#b` as the
-   *same* bookmark or as *different* ones?
+1. **Storage fidelity — passes.** Two bookmarks saved with distinct fragments
+   (`example.com/foo#frag-test-one`, `#frag-test-three`) retained their fragments
+   in the stored `url`.
+2. **Dedupe key — passes.** Read from Linkding's own source rather than inferred
+   from test data. `normalize_url()` in `bookmarks/utils.py` lowercases the scheme
+   and host, strips trailing path slashes, sorts query parameters, and then
+   explicitly preserves the fragment:
 
-**Test 1 can pass while test 2 fails** — the fragment could be stored faithfully
-while the duplicate check runs against a normalized key. In that case the second
-bookmark silently merges into or overwrites the first, and a want disappears with
-no error. That is the dangerous failure, and it is invisible if only the returned
-URL is inspected.
+   ```python
+   # Keep fragment as-is
+   fragment = parsed.fragment
+   ```
 
+   The duplicate check compares against `url_normalized`, which is built from
+   that function. Different fragments therefore produce different normalized
+   URLs and distinct bookmarks.
+
+The test procedure below is retained as the record of what was asked and why the
+two questions are separate; it need not be repeated.
+
+<!-- Original procedure, kept for context if the instance changes:
 **Procedure.**
-
 1. Save a bookmark for `https://example.com/foo#frag-test-one`.
 2. Read it back through the API (`GET /api/bookmarks/?q=frag-test`, or by ID).
    Compare the returned `url` to what was submitted, character for character.
@@ -280,12 +288,17 @@ URL is inspected.
    and route 2 works. One result, whose URL has changed, means fragments are
    normalized away and route 2 is dead.**
 
-Step 4 is the verdict; step 2 only reports whether the string survives a round
-trip.
+Test 1 can pass while test 2 fails — the fragment could be stored faithfully
+while the duplicate check runs against a normalized key. In that case the second
+bookmark silently merges into or overwrites the first, and a want disappears with
+no error. That is the dangerous failure, and it is invisible if only the returned
+URL is inspected.
+-->
 
-**If route 2 is dead**, routes 1 and 3 remain: use real product URLs, or decline
-to represent the want and leave it in vault notes. The application gets smaller
-but is not broken — the fragment was always a concession.
+**Consequence:** local-shop wants with no product page of their own can be
+represented as real items using fragment pseudo-keys. Route 3 remains available
+for wants that cannot be pinned to a URL even loosely.
+
 
 ---
 
@@ -383,13 +396,52 @@ success wins:
 Shopify-backed shops are generally generous (structured data, `/products.json`).
 Large retailers build walls, and their terms of service are not an invitation.
 
-**Politeness is not optional.** Bookmarks concentrate traffic: N items at one shop
-means N URLs at one domain.
+**Concrete policy.** Bookmarks concentrate traffic: N items at one shop means N
+URLs at one domain. The numbers below are starting values, chosen to be dull
+rather than optimal.
 
-- Cache by URL minus fragment.
-- Rate-limit per domain.
-- Respect `robots.txt`.
-- Set a real User-Agent that identifies the tool.
+| Concern | Policy |
+|---|---|
+| Rate limit | 1 request/second **per host**, small global concurrency cap |
+| Cache | By URL minus fragment, SQLite, 24h TTL |
+| `robots.txt` | Fetched and honoured; cache the *parsed decision* per host, not the file |
+| User-Agent | Identifies the tool and links the repo — never a spoofed browser string |
+| Retries | 2, with backoff, on 5xx and timeouts. **None on 4xx** — a 404 is still a 404 tomorrow |
+| Timeouts | 10s connect, 20s total. Retail sites will hold a connection open indefinitely |
+| Block detection | 403/429/captcha ⇒ record `scrape_blocked`, 24h per-host cooldown |
+| On block | Render without price. **Never** fight back |
+
+**Detect and record, never fight.** No user-agent rotation, no proxy chains, no
+retry storms. A wishlist works without prices; obtaining a price by pretending
+not to be a scraper is a bad trade for a personal tool.
+
+**Expect a low yield, and design accordingly.** A real wishlist is mostly dead
+links, local shops with no product page, and bot-walled marketplaces. Thirty
+percent price coverage would be a good outcome. This is why §7.1 exists: **the
+site is a wishlist that occasionally shows prices**, not a price tracker that
+degrades. The architecture is already right; the scraper is a garnish.
+
+### 6.1.1 Browser-based fetching (deferred, but anticipated)
+
+Some sites cannot be fetched by a plain HTTP client at all — a logged-in
+marketplace, or anything that fingerprints TLS and JS. For Amazon specifically, a
+real browser session will likely be required.
+
+**This is a different architecture, not a politeness workaround**, and worth
+keeping conceptually separate:
+
+- An HTTP client pretending to be a browser is deception, however mild.
+- A real browser, in a real session, loading a page you could click yourself, is
+  ordinary browsing at machine speed — closer to a user agent in both senses.
+
+The mechanism already exists in the shop: `amazon-wishlist-sync` drives the
+homelab Chromium over CDP. A price refresher for Amazon could reuse that rather
+than inventing a second approach.
+
+**Out of scope for the HTTP scraper.** If/when it lands it belongs in the same
+family as the wishlist harvester, with the same honesty constraints: no
+credential harvesting, no bypassing paywalls or logins it wasn't given.
+
 
 ### 6.2 Observation store
 
@@ -517,15 +569,19 @@ Out of scope for v1. Not to be stubbed, not to be scaffolded, not to be
 
 ## 10. Open questions
 
-1. **Does Linkding preserve URL fragments, and does it use them in the duplicate
-   key?** Two separate questions — see §4.7.1 for the procedure. Blocks §4.7
-   route 2 only; routes 1 and 3 are unaffected.
+1. **~~Does Linkding preserve URL fragments?~~ RESOLVED 2026-11-24** — yes, and
+   they participate in the duplicate key. Route 2 is live. See §4.7.1.
 2. **Ordering.** Linkding has no priority field. Start with facet plus
-   `date_added`; add explicit ordering only through the Tier 2 override.
-3. **Scraper politeness specifics** — per-domain rate limits, retry policy, and
-   how to handle sites that are persistently hostile.
+   `date_added`; add explicit ordering only through the Tier 2 override. *(Settled
+   in practice by the chronological front page — issue #1.)*
+3. **~~Scraper politeness specifics~~ DECIDED 2026-11-24** — see §6.1. Browser
+   fetching deferred to §6.1.1.
 4. **Lint summary line** — is a one-line tally at end of build worth it, or is
    scrollback enough?
+5. **Whether facet tags are worth adopting at all.** Les currently uses none, and
+   the tag-listing page is deferred pending real usage. If they never appear, the
+   `wishlist:<facet>` convention and its lint rule should be deleted rather than
+   left as aspirational scaffolding.
 
 ---
 
