@@ -40,6 +40,10 @@ const (
 	OutcomeNoData  Outcome = "no_data"
 	OutcomeBlocked Outcome = "blocked"
 	OutcomeError   Outcome = "error"
+	// OutcomeDead is a permanent answer: the page returned 404 (or 410).
+	// Recorded separately from OutcomeError so a closed shop stops consuming
+	// queue slots while a transient timeout keeps retrying.
+	OutcomeDead Outcome = "dead"
 )
 
 // Record appends an observation and advances the item's queue state.
@@ -65,6 +69,11 @@ func Record(db *sql.DB, obs Observation, outcome Outcome, now time.Time) error {
 		point, next = PointFailed, now.Add(RetryAfterError)
 	case OutcomeBlocked:
 		point, next = PointBlocked, now.Add(FirstBlockCooldown)
+	case OutcomeDead:
+		// Never retried. A far-future next_try_at keeps the item out of every
+		// query without needing a special case in NextBatch, and leaves the row
+		// intact so the item still renders on the site.
+		point, next = PointDead, now.Add(100*365*24*time.Hour)
 	default:
 		return fmt.Errorf("unknown outcome %q", outcome)
 	}

@@ -196,6 +196,7 @@ type Progress struct {
 	Done    int
 	Failed  int
 	Blocked int
+	Dead    int
 	Halted  int
 	Stale   int
 }
@@ -224,6 +225,8 @@ func Summarise(db *sql.DB, staleAfter time.Duration, now time.Time) (Progress, e
 			p.Failed = n
 		case PointBlocked:
 			p.Blocked = n
+		case PointDead:
+			p.Dead = n
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -240,7 +243,8 @@ func Summarise(db *sql.DB, staleAfter time.Duration, now time.Time) (Progress, e
 			SELECT i.item_id FROM items i
 			LEFT JOIN (SELECT item_id, MAX(observed_at) AS seen FROM observations GROUP BY item_id) o
 				ON o.item_id = i.item_id
-			WHERE o.seen IS NULL OR o.seen < ?
+			WHERE i.point <> 'dead'
+			  AND (o.seen IS NULL OR o.seen < ?)
 		)
 	`, cutoff).Scan(&p.Stale)
 	if err != nil {

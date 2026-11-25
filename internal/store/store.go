@@ -30,6 +30,12 @@ const (
 	// different responses, and conflating them hides a captcha inside a
 	// report that looks like a working store.
 	PointBlocked Point = "blocked"
+	// PointDead means the page is gone. A 404 is not a transient failure and
+	// not a block: the shop closed or delisted the product, and retrying will
+	// never help. Dead items leave the queue permanently rather than cycling
+	// forever — in this wishlist that bucket is 62 items across 21 closed
+	// stores, mostly a decade of closed novelty shops.
+	PointDead Point = "dead"
 )
 
 // Care is how much caution a host's requests deserve. It is a property of the
