@@ -36,6 +36,14 @@ const (
 	// forever — in this wishlist that bucket is 62 items across 21 closed
 	// stores, mostly a decade of closed novelty shops.
 	PointDead Point = "dead"
+	// PointUnavailable means the page works but the thing cannot be bought:
+	// the shop says OutOfStock or Discontinued. Distinct from PointDead (the
+	// page is gone) and from PointFailed (we simply could not read a price).
+	//
+	// Only an affirmative structured signal sets this. Absence of a price must
+	// never imply unavailability, or a shop that publishes no prices would
+	// silently drop off the live list.
+	PointUnavailable Point = "unavailable"
 )
 
 // Care is how much caution a host's requests deserve. It is a property of the

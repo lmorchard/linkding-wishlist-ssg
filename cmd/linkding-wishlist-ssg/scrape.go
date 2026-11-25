@@ -114,7 +114,7 @@ func (a *application) scrape(ctx context.Context, opts scrapeOptions, envFile ma
 	}
 
 	deadline := now.Add(opts.timebox)
-	var attempted, priced, noData, blocked, dead, errored int
+	var attempted, priced, noData, blocked, dead, unavailable, errored int
 	var carefulDone, normalDone int
 	start := time.Now()
 
@@ -175,6 +175,8 @@ func (a *application) scrape(ctx context.Context, opts scrapeOptions, envFile ma
 			blocked++
 		case store.OutcomeDead:
 			dead++
+		case store.OutcomeUnavailable:
+			unavailable++
 		case store.OutcomeError:
 			errored++
 		}
@@ -197,7 +199,7 @@ func (a *application) scrape(ctx context.Context, opts scrapeOptions, envFile ma
 		}
 	}
 
-	a.reportScrape(db, start, attempted, priced, noData, blocked, dead, errored)
+	a.reportScrape(db, start, attempted, priced, noData, blocked, dead, unavailable, errored)
 	return 0
 }
 
@@ -308,6 +310,18 @@ func (a *application) attempt(ctx context.Context, entry store.QueueEntry) (stor
 	}
 
 	obs.Source = result.Source
+	// Availability is checked first and independently of price: a sold-out item
+	// often still shows its last price, and recording that price while leaving
+	// the item on the live list would be the wrong outcome.
+	if result.Availability.Unavailable() {
+		obs.Status = "unavailable"
+		obs.Price = result.Price
+		obs.Currency = result.Currency
+		obs.Available = result.Available
+		obs.Detail = string(result.Availability)
+		return store.OutcomeUnavailable, obs
+	}
+
 	if result.Status == "priced" {
 		obs.Status = "priced"
 		obs.Price = result.Price
@@ -324,18 +338,18 @@ func (a *application) attempt(ctx context.Context, entry store.QueueEntry) (stor
 // reportScrape prints the run summary and the per-host yield table, which is the
 // honest measure of whether extraction works: overall coverage is dominated by
 // Amazon's share of the item count and says little about the generic pass.
-func (a *application) reportScrape(db *sql.DB, start time.Time, attempted, priced, noData, blocked, dead, errored int) {
+func (a *application) reportScrape(db *sql.DB, start time.Time, attempted, priced, noData, blocked, dead, unavailable, errored int) {
 	fmt.Fprintf(a.stdout, "\n--- run summary (%.1fs) ---\n", time.Since(start).Seconds())
-	fmt.Fprintf(a.stdout, "attempted %d: %d priced, %d no data, %d blocked, %d dead, %d errors\n",
-		attempted, priced, noData, blocked, dead, errored)
+	fmt.Fprintf(a.stdout, "attempted %d: %d priced, %d no data, %d blocked, %d dead, %d unavailable, %d errors\n",
+		attempted, priced, noData, blocked, dead, unavailable, errored)
 
 	progress, err := store.Summarise(db, store.RefreshAfter, a.now())
 	if err != nil {
 		fmt.Fprintf(a.stderr, "warning: summarising: %v\n", err)
 		return
 	}
-	fmt.Fprintf(a.stdout, "queue: %d total, %d fresh, %d done, %d failed, %d blocked, %d dead, %d stale, %d halted hosts\n",
-		progress.Total, progress.Fresh, progress.Done, progress.Failed, progress.Blocked, progress.Dead, progress.Stale, progress.Halted)
+	fmt.Fprintf(a.stdout, "queue: %d total, %d fresh, %d done, %d failed, %d blocked, %d dead, %d unavailable, %d stale, %d halted hosts\n",
+		progress.Total, progress.Fresh, progress.Done, progress.Failed, progress.Blocked, progress.Dead, progress.Unavailable, progress.Stale, progress.Halted)
 
 	reports, err := store.HostReports(db)
 	if err != nil {

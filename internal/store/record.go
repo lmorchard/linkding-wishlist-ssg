@@ -44,6 +44,10 @@ const (
 	// Recorded separately from OutcomeError so a closed shop stops consuming
 	// queue slots while a transient timeout keeps retrying.
 	OutcomeDead Outcome = "dead"
+	// OutcomeUnavailable means the page answered but the shop says the thing
+	// cannot be bought. It still gets a price recorded when one is known (a
+	// sold-out item often shows its last price), but it leaves the live list.
+	OutcomeUnavailable Outcome = "unavailable"
 )
 
 // Record appends an observation and advances the item's queue state.
@@ -74,6 +78,11 @@ func Record(db *sql.DB, obs Observation, outcome Outcome, now time.Time) error {
 		// query without needing a special case in NextBatch, and leaves the row
 		// intact so the item still renders on the site.
 		point, next = PointDead, now.Add(100*365*24*time.Hour)
+	case OutcomeUnavailable:
+		// Unlike dead, this can change: shops restock. Retried on the long
+		// refresh interval so a returning item is noticed without hammering a
+		// shop that is plainly not selling it.
+		point, next = PointUnavailable, now.Add(RefreshAfter)
 	default:
 		return fmt.Errorf("unknown outcome %q", outcome)
 	}
@@ -324,6 +333,31 @@ func LatestPrices(db *sql.DB) (map[string]Observation, error) {
 		obs.Source = source
 		obs.Status = status
 		out[obs.ItemID] = obs
+	}
+	return out, rows.Err()
+}
+
+// UnavailableItems returns the set of item IDs whose latest observation says
+// the shop cannot sell it.
+//
+// Only an affirmative structured signal lands here (see extract.parseAvailability).
+// A missing price is not unavailability.
+func UnavailableItems(db *sql.DB) (map[string]bool, error) {
+	rows, err := db.Query(`
+		SELECT item_id FROM items WHERE point = 'unavailable'
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[string]bool)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
 	}
 	return out, rows.Err()
 }

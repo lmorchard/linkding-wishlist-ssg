@@ -234,3 +234,47 @@ func TestDeadIsPermanentAndNotAStaleItem(t *testing.T) {
 		t.Errorf("Stale = %d, want 1 (only the live, never-observed item)", p.Stale)
 	}
 }
+
+func TestUnavailableIsRetriedButNeverADeadEnd(t *testing.T) {
+	db := openTemp(t)
+	now := at("2026-11-24T12:00:00Z")
+	seed(t, db, []Item{
+		{ItemID: "soldout", URL: "https://shop.example/a", Host: "shop.example", AddedAt: at("2026-11-01T00:00:00Z")},
+	})
+
+	err := Record(db, Observation{
+		ItemID: "soldout", ObservedAt: now, Source: "jsonld",
+		Status: "unavailable", Detail: "OutOfStock",
+	}, OutcomeUnavailable, now)
+	if err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	// Restocking is real, so an unavailable item must come back eventually.
+	soon, err := NextBatch(db, now.Add(time.Hour), 10, nil)
+	if err != nil {
+		t.Fatalf("NextBatch: %v", err)
+	}
+	if len(soon) != 0 {
+		t.Fatal("an unavailable item was retried immediately")
+	}
+
+	later, err := NextBatch(db, now.Add(RefreshAfter+time.Hour), 10, nil)
+	if err != nil {
+		t.Fatalf("NextBatch later: %v", err)
+	}
+	if len(later) != 1 {
+		t.Fatalf("expected the item to be retried after the refresh interval, got %d", len(later))
+	}
+
+	p, err := Summarise(db, RefreshAfter, now)
+	if err != nil {
+		t.Fatalf("Summarise: %v", err)
+	}
+	if p.Unavailable != 1 {
+		t.Errorf("Unavailable = %d, want 1", p.Unavailable)
+	}
+	if p.Dead != 0 {
+		t.Errorf("Dead = %d, want 0 — unavailable is not the same as gone", p.Dead)
+	}
+}

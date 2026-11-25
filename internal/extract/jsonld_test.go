@@ -134,3 +134,74 @@ func TestJSONLDSourceIsSet(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+func TestParseAvailability(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want Availability
+	}{
+		{"plain InStock", "InStock", AvailabilityInStock},
+		{"schema.org URL", "https://schema.org/InStock", AvailabilityInStock},
+		{"schema.org URL out of stock", "https://schema.org/OutOfStock", AvailabilityOutOfStock},
+		{"SoldOut treated as out of stock", "https://schema.org/SoldOut", AvailabilityOutOfStock},
+		{"discontinued", "https://schema.org/Discontinued", AvailabilityDiscontinued},
+		// Measured on shop.startrek.com: a literal newline inside the URL.
+		{"whitespace inside the URL", "http://schema.org/ \n            OutOfStock", AvailabilityOutOfStock},
+		{"trailing slash", "https://schema.org/OutOfStock/", AvailabilityOutOfStock},
+		// These all mean the item can still be had; treating them as
+		// unavailable would hide wanted things.
+		{"PreOrder is not unavailable", "https://schema.org/PreOrder", AvailabilityUnknown},
+		{"BackOrder is not unavailable", "https://schema.org/BackOrder", AvailabilityUnknown},
+		{"LimitedAvailability is not unavailable", "https://schema.org/LimitedAvailability", AvailabilityUnknown},
+		{"empty", "", AvailabilityUnknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := parseAvailability(tt.raw); got != tt.want {
+				t.Fatalf("parseAvailability(%q) = %q, want %q", tt.raw, got, tt.want)
+			}
+		})
+	}
+}
+
+// The measurement that shaped this: every page whose structured data says
+// InStock also contains the literal text "sold out" or "out of stock" in
+// recommendation widgets. Text must never override the structured value.
+func TestOutOfStockTextDoesNotOverrideInStockData(t *testing.T) {
+	doc := page(`{"@type":"Product","offers":{"price":"25.00","priceCurrency":"USD",
+		"availability":"https://schema.org/InStock"}}`)
+	// The kind of boilerplate that fooled a naive text matcher.
+	doc = doc[:len(doc)-len("</body></html>")] +
+		`<div class="recommendations">Sold out! Out of stock! No longer available</div>` +
+		`</body></html>`
+
+	got, err := JSONLD(doc)
+	if err != nil {
+		t.Fatalf("JSONLD: %v", err)
+	}
+	if got.Availability != AvailabilityInStock {
+		t.Fatalf("availability = %q, want InStock despite the page text", got.Availability)
+	}
+	if got.Availability.Unavailable() {
+		t.Fatal("an in-stock item was marked unavailable because of boilerplate text")
+	}
+}
+
+func TestOutOfStockWithPriceStillReportsUnavailable(t *testing.T) {
+	// A sold-out item frequently still shows its last price. The price is real
+	// and worth recording; the item just must not sit on the live list.
+	doc := page(`{"@type":"Product","offers":{"price":"40.00","priceCurrency":"USD",
+		"availability":"https://schema.org/OutOfStock"}}`)
+
+	got, err := JSONLD(doc)
+	if err != nil {
+		t.Fatalf("JSONLD: %v", err)
+	}
+	if !got.Availability.Unavailable() {
+		t.Fatalf("availability = %q, want unavailable", got.Availability)
+	}
+	if got.Price == nil || *got.Price != 40.0 {
+		t.Fatal("the last known price should still be captured")
+	}
+}
