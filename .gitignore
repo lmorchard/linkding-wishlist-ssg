@@ -1,3 +1,7 @@
 /build/
 /linkding-wishlist-ssg
 .env
+/site-preview/
+*.db
+*.db-shm
+*.db-wal

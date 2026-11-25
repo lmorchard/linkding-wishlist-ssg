@@ -22,6 +22,7 @@ import (
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/model"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/render"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/siteconfig"
+	"github.com/lmorchard/linkding-wishlist-ssg/internal/store"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/tier2"
 )
 
@@ -44,6 +45,8 @@ func (a *application) run(ctx context.Context, args []string) int {
 	switch args[0] {
 	case "build":
 		return a.runBuild(ctx, args[1:])
+	case "scrape":
+		return a.runScrape(ctx, args[1:])
 	case "help", "-h", "--help":
 		a.printUsage(a.stdout)
 		return 0
@@ -59,6 +62,14 @@ func (a *application) printUsage(w io.Writer) {
 
 Usage:
   linkding-wishlist-ssg build [flags]
+  linkding-wishlist-ssg scrape [flags]
+
+Commands:
+  build    render bookmarks as a static site (Linkding is read-only)
+  scrape   fetch prices for queued items into a local observation store
+
+Scraping is a separate step from building. Run "scrape" from cron, then "build";
+the two are independent so a scrape failure cannot stop the site from rendering.
 
 Flags:
   --out string             output directory (default "./build")
@@ -126,6 +137,8 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 	fs.Bool("include-archived", false, "include archived bookmarks (debugging only)")
 	fs.String("lint-format", "text", "lint report format: text or json")
 	fs.Bool("no-lint", false, "suppress the lint report")
+	fs.String("store", "./wishlist.db",
+		"observation store to read scraped prices from; missing file is not an error")
 
 	fs.Int("index-months", siteconfig.DefaultWindowMonths,
 		"front page reaches back this many months; 0 shows everything")
@@ -178,6 +191,7 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 	includeArchived := resolve.Bool("include-archived")
 	lintFormat := resolve.String("lint-format")
 	noLint := resolve.Bool("no-lint")
+	storePath := resolve.String("store")
 
 	windowMonths := resolve.Int("index-months")
 	pinnedTag := resolve.String("pinned-tag")
@@ -286,6 +300,13 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 			fmt.Fprintf(a.stderr, "warning: %s\n", warning)
 		}
 		items = append(items, model.FromBookmark(bookmark, overrides))
+	}
+
+	// Observed prices fill in only where a human wrote no override. The
+	// precedence is deliberate: notes are intent, scraping is guesswork, and
+	// intent wins even when the guess is fresher.
+	if applied := a.applyObservedPrices(items, storePath); applied > 0 {
+		fmt.Fprintf(a.stdout, "applied %d observed price(s) from %s\n", applied, storePath)
 	}
 
 	dataset := cluster.Apply(items, rootTag)
@@ -428,4 +449,47 @@ func ensureSafeOutputDir(outDir string) error {
 		return fmt.Errorf("refusing to wipe the home directory; pass a subdirectory to --out")
 	}
 	return nil
+}
+
+// applyObservedPrices copies scraped prices onto items that carry no Tier-2
+// price override, returning how many it touched.
+//
+// A missing store is not an error: the site must build on a machine that has
+// never scraped anything, and a fresh clone should render rather than complain.
+func (a *application) applyObservedPrices(items []model.Item, storePath string) int {
+	if strings.TrimSpace(storePath) == "" {
+		return 0
+	}
+	if _, err := os.Stat(storePath); err != nil {
+		return 0
+	}
+
+	db, err := store.Open(storePath)
+	if err != nil {
+		fmt.Fprintf(a.stderr, "warning: opening %s: %v\n", storePath, err)
+		return 0
+	}
+	defer db.Close()
+
+	prices, err := store.LatestPrices(db)
+	if err != nil {
+		fmt.Fprintf(a.stderr, "warning: reading prices from %s: %v\n", storePath, err)
+		return 0
+	}
+
+	applied := 0
+	for i := range items {
+		if items[i].Overrides.Price != nil {
+			continue
+		}
+		obs, ok := prices[items[i].ID]
+		if !ok || obs.Price == nil || obs.Currency == "" {
+			continue
+		}
+		price, currency := *obs.Price, obs.Currency
+		items[i].Overrides.Price = &price
+		items[i].Overrides.Currency = &currency
+		applied++
+	}
+	return applied
 }
