@@ -4,5 +4,5 @@
 {{if .Months}}<nav class="months">
 {{range .Months}}<a href="{{.Href}}">{{.Label}}</a>
 {{end}}</nav>
-{{end}}{{template "days" .}}
+{{end}}{{template "daylist" .Days}}
 {{template "footer" .}}{{end}}

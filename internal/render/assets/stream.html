@@ -1,4 +1,4 @@
-{{define "days"}}{{range .Days}}<section class="day">
+{{define "daylist"}}{{range .}}<section class="day">
 <h2>{{.Label}}</h2>
 {{range .Runs}}{{template "run" .}}{{end}}
 </section>

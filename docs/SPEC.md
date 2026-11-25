@@ -129,12 +129,60 @@ express a repeatable field.
 
 Therefore:
 
-- **Tags select and coarsely group.** Root selector `wishlist`, plus optional
-  low-cardinality facet tags such as `wishlist:book`, `wishlist:kitchen`.
+- **Tags select and coarsely group.** Root selector `wishlist`, plus whatever
+  topical tags the user actually applies.
 - **No per-item data ever goes into a tag.** No prices, no variants, no IDs.
   Anything with a value belongs in the notes.
 - **`is_archived` is free state.** "Got it" and "no longer wanted" are already
   modelled in Linkding. Use it rather than inventing a status field.
+
+#### 4.2.1 Flat tags, not a facet convention
+
+**Decision (2026-11-25): the site follows the tag vocabulary that exists rather
+than imposing a scheme.** An earlier draft proposed low-cardinality facet tags
+in a `wishlist:<name>` form. Real data did not adopt it and never would have:
+
+| | Proposed | Actual |
+|---|---|---|
+| Grouping tags | `wishlist:book`, `wishlist:kitchen` | `books`, `gaming`, `clothing` |
+| Cardinality | low, curated | 405 tags, accumulated over 20 years |
+| `wishlist:*` tags present | assumed many | **zero** |
+
+Imposing a prefix would mean the tag pages launched empty and stayed empty until
+the user retrofitted two decades of bookmarks. A convention nobody follows is
+worse than no convention.
+
+So: **any tag builds a page**, subject to a threshold and an exclusion list.
+
+#### 4.2.2 Three kinds of tag, distinguished by config not by syntax
+
+Tags carry three unrelated meanings, and the site must not conflate them:
+
+| Kind | Examples | Handled by |
+|---|---|---|
+| **Selector** | `wishlist` | fetched with, never indexed |
+| **Provenance** | `amazon`, `imported:amazon`, `imported:pinboard` | `--exclude-tags` |
+| **Topic** | `gaming`, `clothing`, `hardware` | appears in the tag index |
+| **Presentation** | `wishlist:featured` | `--pinned-tag` |
+
+The distinction is **configuration, not name shape.** Nothing requires a prefix;
+the defaults simply exclude the known selector and provenance tags. An entry
+ending in `:*` matches a prefix, so `imported:*` covers every import source
+without listing them.
+
+A tag page for `wishlist` would be the front page under another heading, and a
+page for `amazon` would be a provenance query posing as a topic. Both are noise;
+both are excluded by default.
+
+#### 4.2.3 Tag page threshold
+
+One- and two-item pages read worse than no page at all. The default threshold is
+**3 items**, configurable via `--tag-page-threshold`, with `0` meaning "build a
+page for every tag".
+
+The threshold applies to page *creation*, not to the tags shown on items. An item
+tagged with a two-item topic still displays that tag; there is simply no page
+behind it yet. As the wishlist grows, pages appear on their own.
 
 ### 4.3 One bookmark per want
 
@@ -299,6 +347,57 @@ URL is inspected.
 represented as real items using fragment pseudo-keys. Route 3 remains available
 for wants that cannot be pinned to a URL even loosely.
 
+
+---
+
+## 4.8 The front page
+
+Three decisions govern what the front page is, all settled against real data
+(1,580 items spanning 2004–2026).
+
+### 4.8.1 A rolling window, not everything
+
+The front page shows the **last 12 months** by default (`--index-months`, `0` for
+no limit). Everything older lives in the archive, the store pages, and the tag
+pages, all of which cover full history.
+
+**Rolling, not calendar-aligned.** A calendar year empties every January and
+refills over the following twelve months; the page would look broken once a year
+for no reason.
+
+Twelve months is roughly 80–150 items at current addition rates — long enough to
+feel continuous, short enough to read. The number is a starting value, not a
+principle.
+
+### 4.8.2 Pinned items
+
+Items tagged `--pinned-tag` (default `wishlist:featured`) render in their own
+block **above** the stream, and are **removed from the stream below**. Nothing
+appears twice on one page.
+
+Pinned items are grouped by day and ordered newest-first exactly like the stream.
+They are not sorted by "priority" or manually ordered — there is no such field,
+and inventing one contradicts §4.2's rule against per-item data in tags.
+
+Pinning means "keep this visible regardless of age", not "keep this at position
+one". A pinned item from 2008 and one from 2026 both appear, each in its day
+heading, newest first.
+
+### 4.8.3 Runs are expanded by default
+
+A run is consecutive items from one store within one day. Adjacent runs *can*
+collapse behind `<details>` (`--collapse-threshold`), but the default is **0:**
+every run renders expanded.
+
+The reason is measured rather than aesthetic. At 1,580 items the largest run in
+the whole dataset is **8 items**, and only 95 of 1,142 runs (8%) reach three.
+Collapsing so little buys almost nothing while hiding content. A wishlist where
+items arrive slowly never produces the dense single-day dumps that make folding
+worthwhile.
+
+The mechanism is kept because that could change — a future bulk import is exactly
+the case where dozens of same-store items land on one day. It is a knob, not a
+default.
 
 ---
 
@@ -578,10 +677,10 @@ Out of scope for v1. Not to be stubbed, not to be scaffolded, not to be
    fetching deferred to §6.1.1.
 4. **Lint summary line** — is a one-line tally at end of build worth it, or is
    scrollback enough?
-5. **Whether facet tags are worth adopting at all.** Les currently uses none, and
-   the tag-listing page is deferred pending real usage. If they never appear, the
-   `wishlist:<facet>` convention and its lint rule should be deleted rather than
-   left as aspirational scaffolding.
+5. **~~Whether facet tags are worth adopting at all.~~ RESOLVED 2026-11-25** —
+   they were not, and the premise was wrong: real data carries 405 flat topical
+   tags and zero `wishlist:*` facets. Tag pages are built from flat tags with an
+   exclusion list and a threshold. See §4.2.1.
 
 ---
 

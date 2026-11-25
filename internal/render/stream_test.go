@@ -82,7 +82,7 @@ func TestBuildRunsCollapsesAtThreshold(t *testing.T) {
 				items = append(items, streamItem(
 					string(rune('a'+i)), key, base.Add(time.Duration(-i)*time.Minute)))
 			}
-			runs := buildRuns(items, nil, "/")
+			runs := buildRuns(items, nil, "/", 3)
 			if len(runs) != len(tt.wantCount) {
 				t.Fatalf("runs = %d, want %d", len(runs), len(tt.wantCount))
 			}
@@ -109,7 +109,7 @@ func TestBuildDaysKeepsRunsInsideTheirDay(t *testing.T) {
 		streamItem("c", "one.example", base.Add(-48*time.Hour)),
 	}
 
-	days := buildDays(items, nil, "/")
+	days := buildDays(items, nil, "/", 3)
 	if len(days) != 3 {
 		t.Fatalf("days = %d, want 3", len(days))
 	}
@@ -126,7 +126,7 @@ func TestBuildDaysSkipsEmptyDays(t *testing.T) {
 		streamItem("b", "one.example", time.Date(2026, 11, 20, 10, 0, 0, 0, time.UTC)),
 	}
 
-	days := buildDays(items, nil, "/")
+	days := buildDays(items, nil, "/", 3)
 	if len(days) != 2 {
 		t.Fatalf("days = %d, want 2", len(days))
 	}

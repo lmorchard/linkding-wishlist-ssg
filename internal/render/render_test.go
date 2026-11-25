@@ -8,6 +8,7 @@ import (
 
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/cluster"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/model"
+	"github.com/lmorchard/linkding-wishlist-ssg/internal/siteconfig"
 )
 
 func testDataset() model.Dataset {
@@ -162,11 +163,48 @@ func siteItem(id, storeKey, title string, added time.Time) model.Item {
 
 func renderSite(t *testing.T, items []model.Item) map[string][]byte {
 	t.Helper()
-	files, err := Site(cluster.Apply(items, "wishlist"), Options{BaseURL: "/", Tag: "wishlist"})
+	cfg := siteconfig.Default()
+	files, err := Site(cluster.Apply(items, "wishlist"), Options{
+		BaseURL: "/",
+		Tag:     "wishlist",
+		Config:  cfg,
+		Now:     time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return files
+}
+
+func renderSiteWith(t *testing.T, items []model.Item, cfg siteconfig.Config) map[string][]byte {
+	t.Helper()
+	files, err := Site(cluster.Apply(items, "wishlist"), Options{
+		BaseURL: "/",
+		Tag:     "wishlist",
+		Config:  cfg,
+		Now:     time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
+}
+
+func TestSiteRendersRunsExpandedByDefault(t *testing.T) {
+	base := time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)
+	items := []model.Item{
+		siteItem("a", "amazon.com", "First", base),
+		siteItem("b", "amazon.com", "Second", base.Add(time.Minute)),
+		siteItem("c", "amazon.com", "Third", base.Add(2*time.Minute)),
+	}
+
+	index := string(renderSite(t, items)["index.html"])
+	if !strings.Contains(index, `<details class="run" open>`) {
+		t.Fatalf("default config should render runs expanded:\n%s", index)
+	}
+	if strings.Contains(index, `<details class="run">`) {
+		t.Fatalf("default config collapsed a run:\n%s", index)
+	}
 }
 
 func TestSiteCollapsesLongRuns(t *testing.T) {
@@ -177,7 +215,10 @@ func TestSiteCollapsesLongRuns(t *testing.T) {
 		siteItem("c", "amazon.com", "Third", base.Add(2*time.Minute)),
 	}
 
-	index := string(renderSite(t, items)["index.html"])
+	cfg := siteconfig.Default()
+	cfg.CollapseThreshold = 3
+
+	index := string(renderSiteWith(t, items, cfg)["index.html"])
 	for _, want := range []string{
 		`<details class="run">`,
 		"3 items",

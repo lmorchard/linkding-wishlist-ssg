@@ -52,6 +52,21 @@ func TestRulesFireAndDoNotFire(t *testing.T) {
 			want: nil,
 		},
 		{
+			name: "shallow path with identifying fragment does not fire",
+			item: model.Item{ID: "a", URL: "https://gamersedition.com/#wishlist-unterzee-chart", Facets: []string{"book"}},
+			want: nil,
+		},
+		{
+			name: "shallow path with empty fragment still fires",
+			item: model.Item{ID: "a", URL: "https://example.com/#", Facets: []string{"book"}},
+			want: []string{CodeShallowPath},
+		},
+		{
+			name: "deep path with fragment does not fire",
+			item: model.Item{ID: "a", URL: "https://example.com/shop/item#anchor", Facets: []string{"book"}},
+			want: nil,
+		},
+		{
 			name: "title equal to store key fires",
 			item: model.Item{ID: "a", URL: "https://www.example.com/a/b", Title: "example.com", Facets: []string{"book"}},
 			want: []string{CodeTitleMatchesHost},

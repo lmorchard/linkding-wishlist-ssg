@@ -21,6 +21,7 @@ import (
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/manifest"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/model"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/render"
+	"github.com/lmorchard/linkding-wishlist-ssg/internal/siteconfig"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/tier2"
 )
 
@@ -67,12 +68,43 @@ Flags:
   --lint-format string     lint report format: text or json (default "text")
   --no-lint                suppress the lint report
 
+Front page and tag pages:
+  --index-months int           front page reaches back this many months; 0 shows everything (default 12)
+  --pinned-tag string          tag whose items float to the top of the front page
+                               (default "wishlist:featured")
+  --tag-page-threshold int     minimum items for a tag page to exist; 0 builds every tag
+                               (default 3)
+  --exclude-tags string        comma-separated tags omitted from the tag index; a trailing
+                               :* matches a prefix (default "wishlist,amazon,imported:*")
+  --collapse-threshold int     fold same-store runs of at least this many items behind
+                               <details>; 0 keeps every run expanded (default 0)
+
+  Every flag can also be set by environment variable; see below.
+
 Environment:
   LINKDING_URL             Linkding base URL, no trailing slash
   LINKDING_TOKEN           Linkding API token
 
-  A .env file in the current directory is loaded if present. Existing
-  environment variables take precedence over values from .env.
+  Every option above also reads an environment variable, prefixed
+  LINKDING_WISHLIST_ and upper-cased with dashes as underscores:
+
+    --index-months         ->  LINKDING_WISHLIST_INDEX_MONTHS
+    --pinned-tag           ->  LINKDING_WISHLIST_PINNED_TAG
+    --tag-page-threshold   ->  LINKDING_WISHLIST_TAG_PAGE_THRESHOLD
+    --exclude-tags         ->  LINKDING_WISHLIST_EXCLUDE_TAGS
+    --collapse-threshold   ->  LINKDING_WISHLIST_COLLAPSE_THRESHOLD
+    --out                  ->  LINKDING_WISHLIST_OUT
+    --tag                  ->  LINKDING_WISHLIST_TAG
+    --base-url             ->  LINKDING_WISHLIST_BASE_URL
+    --include-archived     ->  LINKDING_WISHLIST_INCLUDE_ARCHIVED
+    --lint-format          ->  LINKDING_WISHLIST_LINT_FORMAT
+    --no-lint              ->  LINKDING_WISHLIST_NO_LINT
+
+  Precedence: explicit flag, then process environment, then .env, then the
+  flag's default. A variable set to an empty string still counts as set, so it
+  can clear a .env value without editing the file.
+
+  A .env file in the current directory is loaded if present.
 `)
 }
 
@@ -85,12 +117,26 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 		fmt.Fprint(fs.Output(), "\nCredentials come from LINKDING_URL and LINKDING_TOKEN, or from a .env\nfile in the current directory. The process environment wins.\n")
 	}
 
-	outDir := fs.String("out", "./build", "output directory; created if absent, wiped if present")
-	tag := fs.String("tag", "wishlist", "root selector tag")
-	baseURL := fs.String("base-url", "/", "prefix for absolute links")
-	includeArchived := fs.Bool("include-archived", false, "include archived bookmarks (debugging only)")
-	lintFormat := fs.String("lint-format", "text", "lint report format: text or json")
-	noLint := fs.Bool("no-lint", false, "suppress the lint report")
+	// Flags are declared here for their names, defaults, and help text. Values
+	// are read later through the layered resolver, never from these handles,
+	// because the winner may come from the environment or .env instead.
+	fs.String("out", "./build", "output directory; created if absent, wiped if present")
+	fs.String("tag", "wishlist", "root selector tag")
+	fs.String("base-url", "/", "prefix for absolute links")
+	fs.Bool("include-archived", false, "include archived bookmarks (debugging only)")
+	fs.String("lint-format", "text", "lint report format: text or json")
+	fs.Bool("no-lint", false, "suppress the lint report")
+
+	fs.Int("index-months", siteconfig.DefaultWindowMonths,
+		"front page reaches back this many months; 0 shows everything")
+	fs.String("pinned-tag", siteconfig.DefaultPinnedTag,
+		"tag whose items float to the top of the front page")
+	fs.Int("tag-page-threshold", siteconfig.DefaultTagPageThreshold,
+		"minimum items for a tag page to exist; 0 builds pages for every tag")
+	fs.String("exclude-tags", strings.Join(siteconfig.DefaultExcludedTags, ","),
+		"comma-separated tags omitted from the tag index; trailing :* matches a prefix")
+	fs.Int("collapse-threshold", 0,
+		"fold same-store runs of at least this many items behind <details>; 0 keeps every run expanded")
 
 	if wantsHelp(args) {
 		fs.SetOutput(a.stdout)
@@ -108,14 +154,6 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 		fmt.Fprintf(a.stderr, "error: unexpected argument %q\n", fs.Arg(0))
 		return 1
 	}
-	if *lintFormat != "text" && *lintFormat != "json" {
-		fmt.Fprintf(a.stderr, "error: --lint-format must be \"text\" or \"json\", got %q\n", *lintFormat)
-		return 1
-	}
-	if strings.TrimSpace(*tag) == "" {
-		fmt.Fprintln(a.stderr, "error: --tag must not be empty")
-		return 1
-	}
 
 	envFile := map[string]string{}
 	if a.envFilePath != "" {
@@ -125,6 +163,55 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 		} else {
 			envFile = loaded
 		}
+	}
+
+	// Every option resolves through the same precedence: explicit flag, then
+	// process environment, then .env, then the flag's default. Descriptions and
+	// defaults stay on the flag definitions; only the winning value is read here.
+	resolve := siteconfig.NewResolver(fs, a.lookupEnv, envFile, func(msg string) {
+		fmt.Fprintf(a.stderr, "warning: %s\n", msg)
+	})
+
+	outDir := resolve.String("out")
+	rootTag := resolve.String("tag")
+	baseURL := resolve.String("base-url")
+	includeArchived := resolve.Bool("include-archived")
+	lintFormat := resolve.String("lint-format")
+	noLint := resolve.Bool("no-lint")
+
+	windowMonths := resolve.Int("index-months")
+	pinnedTag := resolve.String("pinned-tag")
+	tagThreshold := resolve.Int("tag-page-threshold")
+	excludedFlag := resolve.String("exclude-tags")
+	collapseThreshold := resolve.Int("collapse-threshold")
+
+	if lintFormat != "text" && lintFormat != "json" {
+		fmt.Fprintf(a.stderr, "error: --lint-format must be \"text\" or \"json\", got %q\n", lintFormat)
+		return 1
+	}
+	if strings.TrimSpace(rootTag) == "" {
+		fmt.Fprintln(a.stderr, "error: --tag must not be empty")
+		return 1
+	}
+	if windowMonths < 0 {
+		fmt.Fprintln(a.stderr, "error: --index-months must not be negative")
+		return 1
+	}
+	if tagThreshold < 0 {
+		fmt.Fprintln(a.stderr, "error: --tag-page-threshold must not be negative")
+		return 1
+	}
+	if collapseThreshold < 0 {
+		fmt.Fprintln(a.stderr, "error: --collapse-threshold must not be negative")
+		return 1
+	}
+
+	siteCfg := siteconfig.Config{
+		WindowMonths:      windowMonths,
+		PinnedTag:         strings.TrimSpace(pinnedTag),
+		TagPageThreshold:  tagThreshold,
+		CollapseThreshold: collapseThreshold,
+		ExcludedTags:      splitTags(excludedFlag),
 	}
 
 	linkdingURL := strings.TrimSpace(a.envValue(envFile, "LINKDING_URL"))
@@ -149,14 +236,14 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 		return 1
 	}
 
-	fmt.Fprintf(a.stdout, "fetching bookmarks tagged %q...\n", *tag)
-	bookmarks, err := client.ListAll(ctx, "#"+*tag, false, 100, a.progress)
+	fmt.Fprintf(a.stdout, "fetching bookmarks tagged %q...\n", rootTag)
+	bookmarks, err := client.ListAll(ctx, "#"+rootTag, false, 100, a.progress)
 	if err != nil {
 		fmt.Fprintf(a.stderr, "error: fetching bookmarks: %v\n", err)
 		return 1
 	}
-	if *includeArchived {
-		archived, err := client.ListAll(ctx, "#"+*tag, true, 100, a.progress)
+	if includeArchived {
+		archived, err := client.ListAll(ctx, "#"+rootTag, true, 100, a.progress)
 		if err != nil {
 			fmt.Fprintf(a.stderr, "error: fetching archived bookmarks: %v\n", err)
 			return 1
@@ -164,7 +251,7 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 		bookmarks = append(bookmarks, archived...)
 	}
 
-	if !*includeArchived {
+	if !includeArchived {
 		filtered := bookmarks[:0]
 		for _, bookmark := range bookmarks {
 			if !bookmark.IsArchived {
@@ -201,11 +288,16 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 		items = append(items, model.FromBookmark(bookmark, overrides))
 	}
 
-	dataset := cluster.Apply(items, *tag)
+	dataset := cluster.Apply(items, rootTag)
 	findings := lint.Run(dataset.Items)
 
-	normalizedBase := normalizeBaseURL(*baseURL)
-	files, err := render.Site(dataset, render.Options{BaseURL: normalizedBase, Tag: *tag})
+	normalizedBase := normalizeBaseURL(baseURL)
+	files, err := render.Site(dataset, render.Options{
+		BaseURL: normalizedBase,
+		Tag:     rootTag,
+		Config:  siteCfg,
+		Now:     a.now(),
+	})
 	if err != nil {
 		fmt.Fprintf(a.stderr, "error: rendering site: %v\n", err)
 		return 1
@@ -213,7 +305,7 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 
 	var manifestBuf bytes.Buffer
 	if err := manifest.Write(&manifestBuf, manifest.Build(dataset, manifest.Options{
-		Tag:         *tag,
+		Tag:         rootTag,
 		BaseURL:     normalizedBase,
 		GeneratedAt: a.now(),
 	})); err != nil {
@@ -222,13 +314,13 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 	}
 	files["manifest.json"] = manifestBuf.Bytes()
 
-	if err := writeFiles(*outDir, files); err != nil {
+	if err := writeFiles(outDir, files); err != nil {
 		fmt.Fprintf(a.stderr, "error: writing output: %v\n", err)
 		return 1
 	}
 
-	if !*noLint {
-		if *lintFormat == "json" {
+	if !noLint {
+		if lintFormat == "json" {
 			err = lint.WriteJSON(a.stdout, findings)
 		} else {
 			err = lint.WriteText(a.stdout, findings)
@@ -240,7 +332,7 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 	}
 
 	fmt.Fprintf(a.stdout, "build: %d item(s), %d store(s), %d facet(s) -> %s\n",
-		len(dataset.Items), len(dataset.Stores), len(dataset.Facets), *outDir)
+		len(dataset.Items), len(dataset.Stores), len(dataset.Facets), outDir)
 	return 0
 }
 
@@ -278,6 +370,18 @@ func normalizeBaseURL(raw string) string {
 		base += "/"
 	}
 	return base
+}
+
+// splitTags parses a comma-separated tag list, dropping blanks so a trailing
+// comma or an empty flag does not produce a phantom exclusion.
+func splitTags(raw string) []string {
+	tags := make([]string, 0)
+	for _, part := range strings.Split(raw, ",") {
+		if tag := strings.TrimSpace(part); tag != "" {
+			tags = append(tags, tag)
+		}
+	}
+	return tags
 }
 
 func writeFiles(outDir string, files map[string][]byte) error {
