@@ -17,7 +17,8 @@ several rules here only make sense against the spec's §7 (resilience) and §4
 - Read bookmarks tagged `wishlist` from a Linkding instance.
 - Map each bookmark to one item; derive a stable ID and a store key per item.
 - Parse optional Tier 2 overrides from the notes.
-- Render a static site: index, one page per store collection, one page per facet.
+- Render a static site: chronological index, stores index, date archives, one
+  page per store collection, one page per facet.
 - Emit the JSON manifest (§7).
 - Run the lint pass and print its report to stdout.
 
@@ -339,16 +340,33 @@ framework, no build step.
 
 ### 8.1 Ordering
 
-Defined once, used everywhere so that §4.3's "first item wins" is deterministic:
+Defined once, used for store pages, facet pages, and the manifest so that §4.3's
+"first item wins" is deterministic:
 
 1. Items with a `priority` override, ascending by priority (1 first).
 2. Then items without one, by `added_at` descending.
 3. Finally, tie-break by `id` ascending.
 
+The front page and archive pages use chronological order instead: `added_at`
+descending, tie-break by `id` ascending. They ignore `priority`.
+
 ### 8.2 Pages
 
-**Index** (`/index.html`) — every item as a card, grouped by store collection.
-One section per store, ordered by store label.
+**Index** (`/index.html`) — every item in `added_at` descending order, grouped
+under an `<h2>` per UTC day, newest day first. Days with no items are skipped.
+Within a day, consecutive items from the same store form runs: a run of 1–2
+items renders as cards inside `<details open>`, and a run of 3 or more renders
+as one collapsed `<details>` row showing the store label, item count, and date
+range. The threshold is the single constant `render.CollapseThreshold`. Runs
+never cross a day boundary. No JavaScript is emitted; `<details>`/`<summary>`
+provide the expand control.
+
+**Stores index** (`/stores/index.html`) — every store with its label, item
+count, and link, ordered by item count descending, then label.
+
+**Archive pages** (`/archive/<year>/index.html`, `/archive/<year>/<month>/index.html`)
+— every year and month containing items, newest first, using the same
+day-grouped, run-collapsed rendering as the index.
 
 **Store page** (`/store/<key>/index.html`) — cards for that store, the store label
 as the heading.
@@ -381,25 +399,25 @@ the build, before the summary line.
 
 | Code | Trigger |
 |---|---|
-| `no_facet` | Item carries no `wishlist:<name>` tag |
-| `shallow_path` | URL path is empty, `/`, or a single segment |
+| `shallow_path` | URL path is empty or exactly `/` |
 | `title_matches_host` | Normalized title equals the store key or hostname |
 | `unparseable_url` | URL failed to parse for store-key derivation |
 
-`no_product_signals` and `scrape_failed` from the spec's table are **not
-implementable in v0**, since v0 never fetches target pages. Do not implement stubs
-for them.
+`no_facet` was removed in v0.1: it fired on every item and named a facet
+convention that was never adopted. `no_product_signals` and `scrape_failed` from
+the spec's table are **not implementable in v0**, since v0 never fetches target
+pages. Do not implement stubs for them.
 
 ### 9.2 Output format
 
 Text (default):
 
 ```
-lint: 4 item(s) look off
+lint: 2 item(s) look off
   a1b2c3d4e5f6  https://www.sevensisterspdx.com/
     shallow_path        consider: is this a store, not a want?
-  b2c3d4e5f6a1  https://example.com/a-book
-    no_facet            consider: retag wishlist:book
+  b2c3d4e5f6a1  https://example.com/
+    title_matches_host  consider: is this a store, not a want?
 ```
 
 JSON (`--lint-format=json`): an array of objects with `id`, `url`, `codes`, and

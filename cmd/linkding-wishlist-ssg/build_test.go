@@ -140,6 +140,10 @@ func TestBuildAgainstFixtures(t *testing.T) {
 		"manifest.json",
 		"assets/style.css",
 		"store/sevensisterspdx.com/index.html",
+		"stores/index.html",
+		"archive/2026/index.html",
+		"archive/2026/11/index.html",
+		"archive/2026/09/index.html",
 		"store/bookshop.org/index.html",
 		"store/example.com/index.html",
 		"store/unknown/index.html",
@@ -177,6 +181,35 @@ func TestBuildAgainstFixtures(t *testing.T) {
 	}
 	if strings.Contains(index, "Archived Want") {
 		t.Fatal("archived bookmark rendered by default")
+	}
+	if strings.Contains(index, "<script") {
+		t.Fatal("index contains a script element")
+	}
+	onAttribute := regexp.MustCompile(`(?i)\son[a-z]+\s*=`)
+	if onAttribute.MatchString(index) {
+		t.Fatal("index contains an inline event handler")
+	}
+
+	november := string(readFile(t, filepath.Join(outDir, "archive/2026/11/index.html")))
+	if !strings.Contains(november, "Sardine Head Salt Bowl") {
+		t.Fatalf("November archive missing November item:\n%s", november)
+	}
+	if strings.Contains(november, "Broken URL") {
+		t.Fatalf("November archive contains a September item:\n%s", november)
+	}
+
+	stores := string(readFile(t, filepath.Join(outDir, "stores/index.html")))
+	exampleStore := strings.Index(stores, "example.com")
+	bookshopStore := strings.Index(stores, "bookshop.org")
+	sevenSisters := strings.Index(stores, "Seven Sisters")
+	if exampleStore < 0 || bookshopStore < 0 || sevenSisters < 0 {
+		t.Fatalf("stores page missing stores:\n%s", stores)
+	}
+	if !(exampleStore < bookshopStore && bookshopStore < sevenSisters) {
+		t.Fatalf("stores page order wrong:\n%s", stores)
+	}
+	if !strings.Contains(stores, "3 items") {
+		t.Fatalf("stores page missing counts:\n%s", stores)
 	}
 
 	manifestBytes, err := os.ReadFile(filepath.Join(outDir, "manifest.json"))
@@ -257,7 +290,7 @@ func TestBuildAgainstFixtures(t *testing.T) {
 		t.Fatalf("tier2 warnings = %d, want 1:\n%s", count, stderr.String())
 	}
 
-	if !strings.Contains(stdout.String(), "lint: 5 item(s) look off") {
+	if !strings.Contains(stdout.String(), "lint: 3 item(s) look off") {
 		t.Fatalf("stdout missing lint summary:\n%s", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "shallow_path") {
@@ -579,8 +612,8 @@ func TestBuildLintJSON(t *testing.T) {
 	if err := decoder.Decode(&findings); err != nil {
 		t.Fatalf("decoding lint JSON: %v\n%s", err, output)
 	}
-	if len(findings) != 5 {
-		t.Fatalf("findings = %d, want 5", len(findings))
+	if len(findings) != 3 {
+		t.Fatalf("findings = %d, want 3", len(findings))
 	}
 }
 
@@ -657,6 +690,7 @@ func TestGoldenManifestAndStorePage(t *testing.T) {
 	}
 
 	compareGolden(t, filepath.Join(outDir, "manifest.json"), "../../testdata/golden/manifest.json")
+	compareGolden(t, filepath.Join(outDir, "index.html"), "../../testdata/golden/index.html")
 	compareGolden(t,
 		filepath.Join(outDir, "store/sevensisterspdx.com/index.html"),
 		"../../testdata/golden/store-sevensisterspdx.com.html")

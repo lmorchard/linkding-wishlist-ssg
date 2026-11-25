@@ -3,7 +3,7 @@
 Render bookmarks tagged `wishlist` in a [Linkding](https://linkding.link/)
 instance as a static wishlist site.
 
-This is v0: no target-page scraping, no prices beyond Tier 2 overrides, no
+This is v0.1: no target-page scraping, no prices beyond Tier 2 overrides, no
 client-side search, no gift claims. It reads Linkding, renders HTML, and emits a
 JSON manifest. See [`docs/SPEC.md`](docs/SPEC.md) for the design and
 [`docs/IMPLEMENTATION-v0.md`](docs/IMPLEMENTATION-v0.md) for the v0 contract.
@@ -31,9 +31,21 @@ The output directory is created if absent and wiped if present. It contains:
 index.html
 manifest.json
 assets/style.css
+stores/index.html
+archive/<year>/index.html
+archive/<year>/<month>/index.html
 store/<store-key>/index.html
 facet/<facet-name>/index.html
 ```
+
+The front page is a chronological stream: items are ordered by `added_at`
+descending and grouped under a heading per day, newest first. Within a day,
+three or more consecutive items from the same store collapse into one
+`<details>` row showing the store, item count, and date range. Shorter runs stay
+open. No JavaScript is emitted.
+
+`/stores/` lists every store by item count, descending. The archive pages use
+the same day-grouped, run-collapsed rendering as the front page.
 
 ## Configuration
 

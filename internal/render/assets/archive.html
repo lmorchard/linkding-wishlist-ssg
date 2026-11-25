@@ -1,0 +1,8 @@
+{{define "archive"}}{{template "head" .}}
+<nav class="back"><a href="{{.HomeHref}}">All items</a>{{if .YearHref}} <a href="{{.YearHref}}">{{.YearLabel}}</a>{{end}}</nav>
+<h1>{{.Heading}}</h1>
+{{if .Months}}<nav class="months">
+{{range .Months}}<a href="{{.Href}}">{{.Label}}</a>
+{{end}}</nav>
+{{end}}{{template "days" .}}
+{{template "footer" .}}{{end}}
