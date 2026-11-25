@@ -139,7 +139,7 @@ func NextBatch(db *sql.DB, now time.Time, limit int, exclude map[Care]bool) ([]Q
 		WHERE h.halted = 0
 		  AND (h.cooldown_until IS NULL OR h.cooldown_until <= ?)
 		  AND i.next_try_at <= ?
-		  AND i.point IN ('fresh', 'failed', 'done', 'blocked')
+		  AND i.point IN ('fresh', 'failed', 'done', 'blocked', 'unavailable')
 		  AND (? OR i.care <> 'careful')
 		  AND (? OR i.care <> 'normal')
 		ORDER BY
@@ -191,14 +191,15 @@ func DueAt(db *sql.DB) (time.Time, bool, error) {
 
 // Progress summarises the queue for the run report.
 type Progress struct {
-	Total   int
-	Fresh   int
-	Done    int
-	Failed  int
-	Blocked int
-	Dead    int
-	Halted  int
-	Stale   int
+	Total       int
+	Fresh       int
+	Done        int
+	Failed      int
+	Blocked     int
+	Dead        int
+	Unavailable int
+	Halted      int
+	Stale       int
 }
 
 // Summarise counts item states, plus hosts currently halted.
@@ -227,6 +228,8 @@ func Summarise(db *sql.DB, staleAfter time.Duration, now time.Time) (Progress, e
 			p.Blocked = n
 		case PointDead:
 			p.Dead = n
+		case PointUnavailable:
+			p.Unavailable = n
 		}
 	}
 	if err := rows.Err(); err != nil {

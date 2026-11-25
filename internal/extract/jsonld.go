@@ -18,15 +18,43 @@ import (
 	"strings"
 )
 
+// Availability is the structured out-of-stock signal, if the page published
+// one.
+//
+// Only schema.org's own vocabulary counts. Measured on this wishlist's hosts:
+// every page whose structured data says InStock ALSO contains the literal words
+// "sold out" or "out of stock" somewhere — recommendation widgets, related
+// products, boilerplate. Matching that text marked 10 in-stock hosts as
+// unavailable, so text is not consulted at all here.
+type Availability string
+
+const (
+	// AvailabilityUnknown means the page published no availability value.
+	AvailabilityUnknown Availability = ""
+	// AvailabilityInStock means buyable.
+	AvailabilityInStock Availability = "InStock"
+	// AvailabilityOutOfStock means the shop says it cannot be bought.
+	AvailabilityOutOfStock Availability = "OutOfStock"
+	// AvailabilityDiscontinued means the shop says it will not return.
+	AvailabilityDiscontinued Availability = "Discontinued"
+)
+
+// Unavailable reports whether this signal means "do not show this on the live
+// list". InStock and Unknown both mean keep it.
+func (a Availability) Unavailable() bool {
+	return a == AvailabilityOutOfStock || a == AvailabilityDiscontinued
+}
+
 // Result is what extraction learned. A Result with Status "no_data" is a real
 // answer: the page loaded and carried no usable offer.
 type Result struct {
-	Status    string // "priced" or "no_data"
-	Price     *float64
-	Currency  string
-	Available *bool
-	Source    string
-	Detail    string
+	Status       string // "priced" or "no_data"
+	Price        *float64
+	Currency     string
+	Available    *bool
+	Availability Availability
+	Source       string
+	Detail       string
 }
 
 // ErrNoDocument means the caller passed nothing to parse, which is a programming
@@ -149,7 +177,8 @@ func offerFromProduct(p map[string]any) (Result, bool) {
 		}
 		r.Currency = strings.ToUpper(strings.TrimSpace(currency))
 		if s, ok := m["availability"].(string); ok {
-			avail := !strings.Contains(strings.ToLower(s), "outofstock")
+			r.Availability = parseAvailability(s)
+			avail := !r.Availability.Unavailable()
 			r.Available = &avail
 		}
 		return r, true
@@ -210,4 +239,34 @@ func numberOf(v any) (float64, bool) {
 		return f, true
 	}
 	return 0, false
+}
+
+// parseAvailability normalizes a schema.org availability value.
+//
+// Values arrive as full URLs (https://schema.org/OutOfStock) and, on at least
+// one measured host, with literal whitespace inside the URL:
+//
+//	"http://schema.org/ \n            OutOfStock"
+//
+// so every run of whitespace is removed before the final path segment is read.
+// Anything unrecognized becomes AvailabilityUnknown rather than a guess:
+// PreOrder, BackOrder and LimitedAvailability all mean the item can still be
+// had, and reporting them as unavailable would hide wanted things.
+func parseAvailability(raw string) Availability {
+	compact := strings.Join(strings.Fields(raw), "")
+	compact = strings.TrimRight(compact, "/")
+	if i := strings.LastIndex(compact, "/"); i >= 0 {
+		compact = compact[i+1:]
+	}
+
+	switch {
+	case strings.EqualFold(compact, "OutOfStock"),
+		strings.EqualFold(compact, "SoldOut"):
+		return AvailabilityOutOfStock
+	case strings.EqualFold(compact, "Discontinued"):
+		return AvailabilityDiscontinued
+	case strings.EqualFold(compact, "InStock"):
+		return AvailabilityInStock
+	}
+	return AvailabilityUnknown
 }

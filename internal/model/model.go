@@ -43,6 +43,10 @@ type Item struct {
 	ModifiedAt  time.Time
 	Archived    bool
 	Overrides   Overrides
+	// Unavailable marks an item the shop says cannot be bought. It still
+	// renders on store, tag, and archive pages — the want was real — but it is
+	// held out of the front-page stream so the main view stays a live list.
+	Unavailable bool
 }
 
 // Store is a derived collection of items sharing a store key.

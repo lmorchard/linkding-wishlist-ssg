@@ -305,8 +305,9 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 	// Observed prices fill in only where a human wrote no override. The
 	// precedence is deliberate: notes are intent, scraping is guesswork, and
 	// intent wins even when the guess is fresher.
-	if applied := a.applyObservedPrices(items, storePath); applied > 0 {
-		fmt.Fprintf(a.stdout, "applied %d observed price(s) from %s\n", applied, storePath)
+	if priced, unavailable := a.applyObservedPrices(items, storePath); priced > 0 || unavailable > 0 {
+		fmt.Fprintf(a.stdout, "applied %d observed price(s), %d unavailable item(s) from %s\n",
+			priced, unavailable, storePath)
 	}
 
 	dataset := cluster.Apply(items, rootTag)
@@ -452,33 +453,43 @@ func ensureSafeOutputDir(outDir string) error {
 }
 
 // applyObservedPrices copies scraped prices onto items that carry no Tier-2
-// price override, returning how many it touched.
+// price override, and marks items the shop reports as unavailable. It returns
+// how many items changed.
 //
 // A missing store is not an error: the site must build on a machine that has
 // never scraped anything, and a fresh clone should render rather than complain.
-func (a *application) applyObservedPrices(items []model.Item, storePath string) int {
+func (a *application) applyObservedPrices(items []model.Item, storePath string) (priced, unavailable int) {
 	if strings.TrimSpace(storePath) == "" {
-		return 0
+		return 0, 0
 	}
 	if _, err := os.Stat(storePath); err != nil {
-		return 0
+		return 0, 0
 	}
 
 	db, err := store.Open(storePath)
 	if err != nil {
 		fmt.Fprintf(a.stderr, "warning: opening %s: %v\n", storePath, err)
-		return 0
+		return 0, 0
 	}
 	defer db.Close()
 
 	prices, err := store.LatestPrices(db)
 	if err != nil {
 		fmt.Fprintf(a.stderr, "warning: reading prices from %s: %v\n", storePath, err)
-		return 0
+		return 0, 0
+	}
+	states, err := store.UnavailableItems(db)
+	if err != nil {
+		fmt.Fprintf(a.stderr, "warning: reading availability from %s: %v\n", storePath, err)
+		return 0, 0
 	}
 
-	applied := 0
 	for i := range items {
+		if states[items[i].ID] {
+			items[i].Unavailable = true
+			unavailable++
+		}
+
 		if items[i].Overrides.Price != nil {
 			continue
 		}
@@ -489,7 +500,7 @@ func (a *application) applyObservedPrices(items []model.Item, storePath string) 
 		price, currency := *obs.Price, obs.Currency
 		items[i].Overrides.Price = &price
 		items[i].Overrides.Currency = &currency
-		applied++
+		priced++
 	}
-	return applied
+	return priced, unavailable
 }

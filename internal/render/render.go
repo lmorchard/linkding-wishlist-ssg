@@ -56,6 +56,10 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 	archives := buildArchives(dataset.Items)
 
 	pinned, stream := splitPinned(dataset.Items, opts.Config.PinnedTag)
+	// Unavailable items are held out of the front-page stream so the main view
+	// stays a live list. They still appear on store, tag, and archive pages,
+	// which are the complete record — bury, do not delete.
+	stream = availableOnly(stream)
 	stream = withinWindow(stream, opts.Config.WindowStart(opts.Now))
 
 	view := pageView{
@@ -297,6 +301,20 @@ func cardFor(item model.Item, storePaths map[string]string, base string) cardVie
 			strconv.FormatFloat(*item.Overrides.Price, 'f', 2, 64)
 	}
 	return card
+}
+
+// availableOnly drops items the shop reports as unavailable, for views that
+// should show a live list. Pinned items are exempt: an editor deliberately
+// featuring something outranks a stock flag.
+func availableOnly(items []model.Item) []model.Item {
+	out := make([]model.Item, 0, len(items))
+	for _, item := range items {
+		if item.Unavailable {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 // splitPinned partitions items into pinned and stream. Pinned items are
