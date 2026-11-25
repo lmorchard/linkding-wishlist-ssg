@@ -9,11 +9,13 @@ import (
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/model"
 )
 
-// CollapseThreshold is the minimum number of consecutive items from one store
-// that renders as a single collapsed row. Shorter runs stay expanded.
-const CollapseThreshold = 3
-
 const (
+	// DefaultCollapseThreshold is the minimum run length worth collapsing.
+	// Zero disables collapsing entirely: every run renders expanded, which is
+	// the shipped default. The mechanism is kept because a future import could
+	// produce dense single-day runs where folding genuinely helps.
+	DefaultCollapseThreshold = 0
+
 	dayLayout   = "January 2, 2006"
 	monthLayout = "January 2006"
 )
@@ -60,8 +62,8 @@ type archiveYear struct {
 }
 
 // buildDays orders items newest first, groups them by UTC calendar day, and
-// collapses same-store runs within each day.
-func buildDays(items []model.Item, storePaths map[string]string, base string) []dayView {
+// groups same-store runs within each day.
+func buildDays(items []model.Item, storePaths map[string]string, base string, collapseAt int) []dayView {
 	ordered := chronological(items)
 	days := make([]dayView, 0)
 	for start := 0; start < len(ordered); {
@@ -72,7 +74,7 @@ func buildDays(items []model.Item, storePaths map[string]string, base string) []
 		}
 		days = append(days, dayView{
 			Label: ordered[start].AddedAt.UTC().Format(dayLayout),
-			Runs:  buildRuns(ordered[start:end], storePaths, base),
+			Runs:  buildRuns(ordered[start:end], storePaths, base, collapseAt),
 		})
 		start = end
 	}
@@ -80,8 +82,9 @@ func buildDays(items []model.Item, storePaths map[string]string, base string) []
 }
 
 // buildRuns groups consecutive items sharing a store key. The caller has
-// already restricted the items to one day.
-func buildRuns(items []model.Item, storePaths map[string]string, base string) []runView {
+// already restricted the items to one day. collapseAt of zero renders every run
+// expanded.
+func buildRuns(items []model.Item, storePaths map[string]string, base string, collapseAt int) []runView {
 	runs := make([]runView, 0)
 	for start := 0; start < len(items); {
 		end := start + 1
@@ -100,7 +103,7 @@ func buildRuns(items []model.Item, storePaths map[string]string, base string) []
 			Count:      len(run),
 			CountLabel: countLabel(len(run)),
 			RangeLabel: dateRangeLabel(run[len(run)-1].AddedAt, run[0].AddedAt),
-			Collapsed:  len(run) >= CollapseThreshold,
+			Collapsed:  collapseAt > 0 && len(run) >= collapseAt,
 			Cards:      cardsFor(run, storePaths, base),
 		})
 		start = end

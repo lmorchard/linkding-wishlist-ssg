@@ -67,7 +67,7 @@ func evaluate(item model.Item) ([]string, []string) {
 	}
 
 	if err == nil && storeKeyOK {
-		if isShallowPath(parsed.Path) {
+		if isShallowPath(parsed.Path) && !isFragmentOnly(parsed) {
 			add(CodeShallowPath, suggestionShallowPath)
 		}
 		if titleMatchesHost(item.Title, parsed.Hostname(), item.StoreKey) {
@@ -80,6 +80,16 @@ func evaluate(item model.Item) ([]string, []string) {
 
 func isShallowPath(path string) bool {
 	return path == "" || path == "/"
+}
+
+// isFragmentOnly looks like a bare site but carries an identifying fragment.
+//
+// These come from reconstructing a URL the source never preserved: a shop host
+// plus a slug fragment naming the specific want. The path is shallow, but the
+// fragment is exactly the specificity a bare store bookmark lacks, so the
+// "is this a store?" rule does not apply.
+func isFragmentOnly(parsed *url.URL) bool {
+	return isShallowPath(parsed.Path) && strings.TrimSpace(parsed.Fragment) != ""
 }
 
 func titleMatchesHost(title, hostname, storeKey string) bool {

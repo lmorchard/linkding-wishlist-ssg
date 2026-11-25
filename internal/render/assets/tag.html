@@ -1,0 +1,8 @@
+{{define "tag"}}{{template "head" .}}
+<h1>{{.Heading}}</h1>
+<nav class="views">
+<a href="{{.HomeHref}}">Wishlist</a>
+<a href="{{.TagsHref}}">All tags</a>
+</nav>
+{{template "daylist" .Days}}
+{{template "footer" .}}{{end}}

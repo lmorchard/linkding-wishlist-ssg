@@ -8,8 +8,16 @@
 </nav>
 {{end}}<nav class="views">
 <a href="{{.StoresHref}}">All stores</a>
+<a href="/tags/">All tags</a>
 {{if .Years}}<span class="views-label">Archive</span>
 {{range .Years}}<a href="{{.Href}}">{{.Label}}</a>
 {{end}}{{end}}</nav>
-{{template "days" .}}
+{{if .PinnedDays}}<section class="pinned">
+<h2 class="pinned-heading">Pinned</h2>
+{{template "daylist" .PinnedDays}}
+</section>
+{{end}}<section class="stream">
+{{if and .PinnedDays .Days}}<h2 class="stream-heading">Recent</h2>
+{{end}}{{template "daylist" .Days}}
+</section>
 {{template "footer" .}}{{end}}

@@ -10,8 +10,10 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/model"
+	"github.com/lmorchard/linkding-wishlist-ssg/internal/siteconfig"
 )
 
 //go:embed assets
@@ -21,6 +23,8 @@ var assetsFS embed.FS
 type Options struct {
 	BaseURL string
 	Tag     string
+	Config  siteconfig.Config
+	Now     time.Time
 }
 
 // Site renders every page and returns files keyed by slash-separated relative
@@ -51,6 +55,9 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 	base := opts.BaseURL
 	archives := buildArchives(dataset.Items)
 
+	pinned, stream := splitPinned(dataset.Items, opts.Config.PinnedTag)
+	stream = withinWindow(stream, opts.Config.WindowStart(opts.Now))
+
 	view := pageView{
 		Title:      "Wishlist",
 		Heading:    "Wishlist",
@@ -58,7 +65,10 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 		HomeHref:   joinBase(base, "/"),
 		StoresHref: joinBase(base, "/stores/"),
 		Tag:        opts.Tag,
-		Days:       buildDays(dataset.Items, storePaths, base),
+		PinnedDays: buildDays(pinned, storePaths, base, opts.Config.CollapseThreshold),
+		Days:       buildDays(stream, storePaths, base, opts.Config.CollapseThreshold),
+		PinnedTag:  opts.Config.PinnedTag,
+		TagsHref:   joinBase(base, "/tags/"),
 	}
 	for _, facet := range dataset.Facets {
 		view.Facets = append(view.Facets, facetLinkView{
@@ -137,6 +147,49 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 	}
 	files["stores/index.html"] = storesHTML
 
+	// Tag pages cover the full history, never the index window: a tag is a way
+	// to browse everything matching it, so hiding old items would defeat it.
+	tags := buildTags(dataset.Items, opts.Config)
+	tagsIndexView := pageView{
+		Title:      "Tags — Wishlist",
+		Heading:    "Tags",
+		CSSHref:    joinBase(base, "/assets/style.css"),
+		HomeHref:   joinBase(base, "/"),
+		StoresHref: joinBase(base, "/stores/"),
+		Tag:        opts.Tag,
+		TagsHref:   joinBase(base, "/tags/"),
+	}
+	for _, collection := range tags {
+		tagsIndexView.Tags = append(tagsIndexView.Tags, tagLinkView{
+			Name:       collection.Name,
+			Href:       joinBase(base, collection.Path),
+			Count:      len(collection.Items),
+			CountLabel: countLabel(len(collection.Items)),
+		})
+	}
+	tagsHTML, err := execute(tmpl, "tags", tagsIndexView)
+	if err != nil {
+		return nil, err
+	}
+	files["tags/index.html"] = tagsHTML
+
+	for _, collection := range tags {
+		tagView := pageView{
+			Title:    collection.Name + " — Wishlist",
+			Heading:  collection.Name,
+			CSSHref:  joinBase(base, "/assets/style.css"),
+			HomeHref: joinBase(base, "/"),
+			Tag:      opts.Tag,
+			TagsHref: joinBase(base, "/tags/"),
+			Days:     buildDays(collection.Items, storePaths, base, opts.Config.CollapseThreshold),
+		}
+		page, err := execute(tmpl, "tag", tagView)
+		if err != nil {
+			return nil, err
+		}
+		files[fileForPath(collection.Path, collection.Path)] = page
+	}
+
 	for _, year := range archives {
 		yearView := pageView{
 			Title:    fmt.Sprintf("%d — Wishlist", year.Year),
@@ -153,7 +206,7 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 			})
 			yearItems = append(yearItems, month.Items...)
 		}
-		yearView.Days = buildDays(yearItems, storePaths, base)
+		yearView.Days = buildDays(yearItems, storePaths, base, opts.Config.CollapseThreshold)
 
 		yearPath := archiveYearPath(year.Year)
 		yearHTML, err := execute(tmpl, "archive", yearView)
@@ -171,7 +224,7 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 				Tag:       opts.Tag,
 				YearHref:  joinBase(base, archiveYearPath(year.Year)),
 				YearLabel: strconv.Itoa(year.Year),
-				Days:      buildDays(month.Items, storePaths, base),
+				Days:      buildDays(month.Items, storePaths, base, opts.Config.CollapseThreshold),
 			}
 			monthPath := archiveMonthPath(month.Year, month.Month)
 			monthHTML, err := execute(tmpl, "archive", monthView)
@@ -192,13 +245,18 @@ type pageView struct {
 	HomeHref string
 	Tag      string
 
+	PinnedDays []dayView
+	PinnedTag  string
+
 	Facets []facetLinkView
 	Cards  []cardView
 
-	Days   []dayView
-	Stores []storeLinkView
-	Years  []linkView
-	Months []linkView
+	Days     []dayView
+	Stores   []storeLinkView
+	Years    []linkView
+	Tags     []tagLinkView
+	TagsHref string
+	Months   []linkView
 
 	StoresHref string
 	YearHref   string
@@ -239,6 +297,47 @@ func cardFor(item model.Item, storePaths map[string]string, base string) cardVie
 			strconv.FormatFloat(*item.Overrides.Price, 'f', 2, 64)
 	}
 	return card
+}
+
+// splitPinned partitions items into pinned and stream. Pinned items are
+// removed from the stream so nothing renders twice on one page.
+func splitPinned(items []model.Item, pinnedTag string) (pinned, stream []model.Item) {
+	if pinnedTag == "" {
+		return nil, items
+	}
+	pinned = make([]model.Item, 0)
+	stream = make([]model.Item, 0, len(items))
+	for _, item := range items {
+		if hasTag(item, pinnedTag) {
+			pinned = append(pinned, item)
+			continue
+		}
+		stream = append(stream, item)
+	}
+	return pinned, stream
+}
+
+func hasTag(item model.Item, tag string) bool {
+	for _, t := range item.Tags {
+		if t == tag {
+			return true
+		}
+	}
+	return false
+}
+
+// withinWindow drops items added before start. A zero start keeps everything.
+func withinWindow(items []model.Item, start time.Time) []model.Item {
+	if start.IsZero() {
+		return items
+	}
+	kept := make([]model.Item, 0, len(items))
+	for _, item := range items {
+		if !item.AddedAt.Before(start) {
+			kept = append(kept, item)
+		}
+	}
+	return kept
 }
 
 func execute(tmpl *template.Template, name string, view pageView) ([]byte, error) {

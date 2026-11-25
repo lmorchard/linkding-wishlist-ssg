@@ -1,0 +1,10 @@
+{{define "tags"}}{{template "head" .}}
+<h1>{{.Heading}}</h1>
+<nav class="views">
+<a href="{{.HomeHref}}">Wishlist</a>
+<a href="{{.StoresHref}}">All stores</a>
+</nav>
+<ul class="tag-index">
+{{range .Tags}}<li><a href="{{.Href}}">{{.Name}}</a> <span class="tag-count">{{.CountLabel}}</span></li>
+{{end}}</ul>
+{{template "footer" .}}{{end}}
