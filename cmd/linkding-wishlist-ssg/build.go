@@ -500,11 +500,25 @@ func (a *application) applyObservedPrices(items []model.Item, storePath string) 
 			unavailable++
 		}
 
+		obs, ok := prices[items[i].ID]
+		if !ok {
+			continue
+		}
+
+		// Overlay observed image if item has no Tier-2 image override
+		if items[i].Overrides.Image == nil && obs.ImageURL != "" {
+			items[i].ImageURL = obs.ImageURL
+		}
+
+		// Overlay observed description if Linkding description is empty
+		if strings.TrimSpace(items[i].Description) == "" && obs.Description != "" {
+			items[i].Description = obs.Description
+		}
+
 		if items[i].Overrides.Price != nil {
 			continue
 		}
-		obs, ok := prices[items[i].ID]
-		if !ok || obs.Price == nil || obs.Currency == "" {
+		if obs.Price == nil || obs.Currency == "" {
 			continue
 		}
 		price, currency := *obs.Price, obs.Currency

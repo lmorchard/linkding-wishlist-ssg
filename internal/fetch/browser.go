@@ -157,9 +157,37 @@ func (b *BrowserClient) FetchAmazon(ctx context.Context, targetURL string) (extr
 		const symbol = document.querySelector(".a-price .a-price-symbol")?.innerText?.trim();
 		const availText = document.querySelector("#availability")?.innerText?.trim();
 		const title = document.querySelector("#productTitle")?.innerText?.trim();
+
+		// Image extraction: main landing image or book front cover
+		const imgEl = document.querySelector("#landingImage, #imgBlkFront, #main-image, #ebooks-img-canvas img");
+		const imageUrl = imgEl?.getAttribute("src") || imgEl?.getAttribute("data-old-hires") || "";
+
+		// Short bullet description or feature text
+		const bullets = Array.from(document.querySelectorAll("#feature-bullets li span.a-list-item"))
+			.map(el => el.innerText?.trim())
+			.filter(t => t && !t.startsWith("Make sure this fits"))
+			.slice(0, 3)
+			.join(" • ");
+		const description = bullets || document.querySelector("#productDescription")?.innerText?.trim() || "";
+
+		// Target raw payload: capture key product center markup (or body snippet) for offline replay
+		const rawContainer = document.querySelector("#centerCol, #dp")?.outerHTML || "";
+
 		const isDogPage = document.title.includes("Page Not Found") || !!document.querySelector("img[alt*='dogs of Amazon']");
 		const isCaptcha = document.title.includes("Robot Check") || !!document.querySelector("form[action*='validateCaptcha']");
-		return { title, offscreen, whole, fraction, symbol, availText, isDogPage, isCaptcha };
+		return {
+			title,
+			offscreen,
+			whole,
+			fraction,
+			symbol,
+			availText,
+			imageUrl,
+			description,
+			rawHtml: rawContainer,
+			isDogPage,
+			isCaptcha
+		};
 	})()`
 
 	var raw extract.AmazonRaw

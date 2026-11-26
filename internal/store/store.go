@@ -65,14 +65,17 @@ const (
 // Source "jsonld" is a real answer: the page had structured data and it carried
 // no offer.
 type Observation struct {
-	ItemID     string
-	ObservedAt time.Time
-	Price      *float64
-	Currency   string
-	Available  *bool
-	Source     string
-	Status     string
-	Detail     string
+	ItemID      string
+	ObservedAt  time.Time
+	Price       *float64
+	Currency    string
+	Available   *bool
+	Source      string
+	Status      string
+	Detail      string
+	ImageURL    string
+	Description string
+	RawPayload  string
 }
 
 // Item is a scrape target and its queue state.
@@ -132,6 +135,9 @@ CREATE TABLE IF NOT EXISTS observations (
 	source      TEXT NOT NULL,
 	status      TEXT NOT NULL,
 	detail      TEXT,
+	image_url   TEXT,
+	description TEXT,
+	raw_payload TEXT,
 	PRIMARY KEY (item_id, observed_at)
 );
 
@@ -170,5 +176,16 @@ func Open(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("applying schema: %w", err)
 	}
+
+	// Migrations: ensure columns exist if opened on an older database
+	migrations := []string{
+		"ALTER TABLE observations ADD COLUMN image_url TEXT",
+		"ALTER TABLE observations ADD COLUMN description TEXT",
+		"ALTER TABLE observations ADD COLUMN raw_payload TEXT",
+	}
+	for _, m := range migrations {
+		_, _ = db.Exec(m) // Ignore error if column already exists
+	}
+
 	return db, nil
 }

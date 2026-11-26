@@ -10,14 +10,17 @@ import (
 // AmazonRaw is the structured evaluation payload returned from the browser
 // running against an Amazon product page.
 type AmazonRaw struct {
-	Title     string `json:"title"`
-	Offscreen string `json:"offscreen"` // e.g. "$49.99"
-	Whole     string `json:"whole"`     // e.g. "49"
-	Fraction  string `json:"fraction"`  // e.g. "99"
-	Symbol    string `json:"symbol"`    // e.g. "$"
-	AvailText string `json:"availText"` // e.g. "In Stock", "Currently unavailable."
-	IsDogPage bool   `json:"isDogPage"` // 404 / Dogs of Amazon
-	IsCaptcha bool   `json:"isCaptcha"` // Robot check / captcha wall
+	Title       string `json:"title"`
+	Offscreen   string `json:"offscreen"`   // e.g. "$49.99"
+	Whole       string `json:"whole"`       // e.g. "49"
+	Fraction    string `json:"fraction"`    // e.g. "99"
+	Symbol      string `json:"symbol"`      // e.g. "$"
+	AvailText   string `json:"availText"`   // e.g. "In Stock", "Currently unavailable."
+	ImageURL    string `json:"imageUrl"`    // Product main image URL
+	Description string `json:"description"` // Short bullet or description text
+	RawHTML     string `json:"rawHtml"`     // Key HTML container or payload snapshot
+	IsDogPage   bool   `json:"isDogPage"`   // 404 / Dogs of Amazon
+	IsCaptcha   bool   `json:"isCaptcha"`   // Robot check / captcha wall
 }
 
 var priceRegex = regexp.MustCompile(`([0-9]+(?:\.[0-9]{2})?)`)
@@ -36,6 +39,9 @@ func Amazon(raw AmazonRaw) (Result, error) {
 		Source:       "amazon-dom",
 		Status:       "no_data",
 		Availability: AvailabilityUnknown,
+		ImageURL:     strings.TrimSpace(raw.ImageURL),
+		Description:  strings.TrimSpace(raw.Description),
+		RawPayload:   strings.TrimSpace(raw.RawHTML),
 	}
 
 	// 1. Availability

@@ -18,6 +18,8 @@ import (
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/linkding"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/lint"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/manifest"
+	"github.com/lmorchard/linkding-wishlist-ssg/internal/model"
+	"github.com/lmorchard/linkding-wishlist-ssg/internal/store"
 )
 
 var updateGolden = flag.Bool("update", false, "update golden files")
@@ -791,4 +793,81 @@ func normalizeGeneratedAt(t *testing.T, data []byte) []byte {
 		t.Fatal("generated_at not found in manifest")
 	}
 	return replaced
+}
+
+func TestApplyObservedPricesAndMetadata(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "wishlist.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+
+	now := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
+	itemsToSeed := []store.Item{
+		{ItemID: "i1", URL: "https://shop.example/1", Host: "shop.example", AddedAt: now},
+		{ItemID: "i2", URL: "https://shop.example/2", Host: "shop.example", AddedAt: now},
+	}
+	if _, err := store.Ingest(db, itemsToSeed, now); err != nil {
+		t.Fatalf("Ingest: %v", err)
+	}
+
+	price1 := 42.50
+	avail1 := true
+	obs1 := store.Observation{
+		ItemID:      "i1",
+		ObservedAt:  now,
+		Price:       &price1,
+		Currency:    "USD",
+		Available:   &avail1,
+		Source:      "jsonld",
+		Status:      "priced",
+		ImageURL:    "https://shop.example/i1.jpg",
+		Description: "A great item",
+		RawPayload:  "{\"name\":\"i1\"}",
+	}
+	if err := store.Record(db, obs1, store.OutcomePriced, now); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	app := &application{}
+	modelItems := []model.Item{
+		{
+			ID:          "i1",
+			URL:         "https://shop.example/1",
+			Title:       "Item 1",
+			Description: "", // empty, should be overlaid
+		},
+		{
+			ID:          "i2",
+			URL:         "https://shop.example/2",
+			Title:       "Item 2",
+			Description: "Existing description",
+		},
+	}
+
+	priced, unavailable := app.applyObservedPrices(modelItems, dbPath)
+	if priced != 1 {
+		t.Errorf("priced = %d, want 1", priced)
+	}
+	if unavailable != 0 {
+		t.Errorf("unavailable = %d, want 0", unavailable)
+	}
+
+	// Verify modelItems[0] got price, image, and description
+	if modelItems[0].Overrides.Price == nil || *modelItems[0].Overrides.Price != 42.50 {
+		t.Errorf("item 0 price = %v, want 42.50", modelItems[0].Overrides.Price)
+	}
+	if modelItems[0].ImageURL != "https://shop.example/i1.jpg" {
+		t.Errorf("item 0 ImageURL = %q, want 'https://shop.example/i1.jpg'", modelItems[0].ImageURL)
+	}
+	if modelItems[0].Description != "A great item" {
+		t.Errorf("item 0 Description = %q, want 'A great item'", modelItems[0].Description)
+	}
+
+	// Verify modelItems[1] was untouched
+	if modelItems[1].Description != "Existing description" {
+		t.Errorf("item 1 Description = %q, want 'Existing description'", modelItems[1].Description)
+	}
 }

@@ -117,17 +117,20 @@ func appendObservation(tx *sql.Tx, obs Observation) error {
 	}
 	_, err := tx.Exec(`
 		INSERT INTO observations
-			(item_id, observed_at, price, currency, available, source, status, detail)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			(item_id, observed_at, price, currency, available, source, status, detail, image_url, description, raw_payload)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(item_id, observed_at) DO UPDATE SET
 			price = excluded.price,
 			currency = excluded.currency,
 			available = excluded.available,
 			source = excluded.source,
 			status = excluded.status,
-			detail = excluded.detail
+			detail = excluded.detail,
+			image_url = excluded.image_url,
+			description = excluded.description,
+			raw_payload = excluded.raw_payload
 	`, obs.ItemID, stamp(obs.ObservedAt), obs.Price, obs.Currency,
-		available, obs.Source, obs.Status, obs.Detail)
+		available, obs.Source, obs.Status, obs.Detail, obs.ImageURL, obs.Description, obs.RawPayload)
 	if err != nil {
 		return fmt.Errorf("recording observation for %s: %w", obs.ItemID, err)
 	}
@@ -213,14 +216,16 @@ func LatestObservation(db *sql.DB, itemID string) (Observation, bool, error) {
 	var obs Observation
 	var observed string
 	var price sql.NullFloat64
-	var currency, source, status, detail sql.NullString
+	var currency, source, status, detail, imageURL, description, rawPayload sql.NullString
 	var available sql.NullInt64
 
 	err := db.QueryRow(`
-		SELECT observed_at, price, currency, available, source, status, detail
+		SELECT observed_at, price, currency, available, source, status, detail,
+		       COALESCE(image_url, ''), COALESCE(description, ''), COALESCE(raw_payload, '')
 		FROM observations WHERE item_id = ?
 		ORDER BY observed_at DESC LIMIT 1
-	`, itemID).Scan(&observed, &price, &currency, &available, &source, &status, &detail)
+	`, itemID).Scan(&observed, &price, &currency, &available, &source, &status, &detail,
+		&imageURL, &description, &rawPayload)
 	if err == sql.ErrNoRows {
 		return obs, false, nil
 	}
@@ -242,6 +247,9 @@ func LatestObservation(db *sql.DB, itemID string) (Observation, bool, error) {
 	obs.Source = source.String
 	obs.Status = status.String
 	obs.Detail = detail.String
+	obs.ImageURL = imageURL.String
+	obs.Description = description.String
+	obs.RawPayload = rawPayload.String
 	return obs, true, nil
 }
 
@@ -303,7 +311,7 @@ func HostReports(db *sql.DB) ([]HostReport, error) {
 func LatestPrices(db *sql.DB) (map[string]Observation, error) {
 	rows, err := db.Query(`
 		SELECT o.item_id, o.observed_at, o.price, COALESCE(o.currency, ''),
-		       o.source, o.status
+		       o.source, o.status, COALESCE(o.image_url, ''), COALESCE(o.description, '')
 		FROM observations o
 		JOIN (
 			SELECT item_id, MAX(observed_at) AS newest
@@ -319,9 +327,9 @@ func LatestPrices(db *sql.DB) (map[string]Observation, error) {
 	out := make(map[string]Observation)
 	for rows.Next() {
 		var obs Observation
-		var observed, currency, source, status string
+		var observed, currency, source, status, imageURL, description string
 		var price sql.NullFloat64
-		if err := rows.Scan(&obs.ItemID, &observed, &price, &currency, &source, &status); err != nil {
+		if err := rows.Scan(&obs.ItemID, &observed, &price, &currency, &source, &status, &imageURL, &description); err != nil {
 			return nil, err
 		}
 		obs.ObservedAt, _ = parseStamp(observed)
@@ -332,6 +340,8 @@ func LatestPrices(db *sql.DB) (map[string]Observation, error) {
 		obs.Currency = currency
 		obs.Source = source
 		obs.Status = status
+		obs.ImageURL = imageURL
+		obs.Description = description
 		out[obs.ItemID] = obs
 	}
 	return out, rows.Err()
