@@ -49,6 +49,8 @@ func (a *application) run(ctx context.Context, args []string) int {
 		return a.runScrape(ctx, args[1:])
 	case "serve":
 		return a.runServe(ctx, args[1:])
+	case "extract":
+		return a.runExtract(ctx, args[1:])
 	case "help", "-h", "--help":
 		a.printUsage(a.stdout)
 		return 0
@@ -65,11 +67,13 @@ func (a *application) printUsage(w io.Writer) {
 Usage:
   linkding-wishlist-ssg build [flags]
   linkding-wishlist-ssg scrape [flags]
+  linkding-wishlist-ssg extract [flags]
   linkding-wishlist-ssg serve [flags]
 
 Commands:
   build    render bookmarks as a static site (Linkding is read-only)
   scrape   fetch prices for queued items into a local observation store
+  extract  reprocess previously scraped raw payloads in the local store
   serve    start a local HTTP static file server to preview the generated site
 
 Scraping is a separate step from building. Run "scrape" from cron, then "build";

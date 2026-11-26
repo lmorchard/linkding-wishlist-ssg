@@ -371,3 +371,125 @@ func UnavailableItems(db *sql.DB) (map[string]bool, error) {
 	}
 	return out, rows.Err()
 }
+
+// RawPayloadObservations returns observations that contain raw payload content.
+// If onlyMissing is true, it only returns observations where price, image_url,
+// or description are absent.
+func RawPayloadObservations(db *sql.DB, onlyMissing bool) ([]Observation, error) {
+	query := `
+		SELECT o.item_id, o.observed_at, o.price, o.currency, o.available, o.source, o.status, o.detail,
+		       COALESCE(o.image_url, ''), COALESCE(o.description, ''), COALESCE(o.raw_payload, ''),
+		       i.url
+		FROM observations o
+		JOIN items i ON i.item_id = o.item_id
+		WHERE o.raw_payload IS NOT NULL AND o.raw_payload != ''
+	`
+	if onlyMissing {
+		query += ` AND (o.price IS NULL OR o.image_url IS NULL OR o.image_url = '' OR o.description IS NULL OR o.description = '')`
+	}
+	query += ` ORDER BY o.observed_at DESC`
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Observation
+	for rows.Next() {
+		var obs Observation
+		var observed string
+		var price sql.NullFloat64
+		var currency, source, status, detail, imageURL, description, rawPayload, urlStr sql.NullString
+		var available sql.NullInt64
+
+		if err := rows.Scan(&obs.ItemID, &observed, &price, &currency, &available, &source, &status, &detail,
+			&imageURL, &description, &rawPayload, &urlStr); err != nil {
+			return nil, err
+		}
+		obs.ObservedAt, _ = parseStamp(observed)
+		if price.Valid {
+			p := price.Float64
+			obs.Price = &p
+		}
+		obs.Currency = currency.String
+		if available.Valid {
+			a := available.Int64 == 1
+			obs.Available = &a
+		}
+		obs.Source = source.String
+		obs.Status = status.String
+		obs.Detail = detail.String
+		obs.ImageURL = imageURL.String
+		obs.Description = description.String
+		obs.RawPayload = rawPayload.String
+		obs.URL = urlStr.String
+		out = append(out, obs)
+	}
+	return out, rows.Err()
+}
+
+// UpdateObservation updates an existing observation's extracted fields in-place
+// without altering its primary key (item_id, observed_at). It also updates the
+// corresponding item's point and next_try_at if the observation status changed.
+func UpdateObservation(db *sql.DB, obs Observation, outcome Outcome, now time.Time) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var available any
+	if obs.Available != nil {
+		if *obs.Available {
+			available = 1
+		} else {
+			available = 0
+		}
+	}
+
+	_, err = tx.Exec(`
+		UPDATE observations
+		SET price = ?,
+		    currency = ?,
+		    available = ?,
+		    status = ?,
+		    detail = ?,
+		    image_url = ?,
+		    description = ?
+		WHERE item_id = ? AND observed_at = ?
+	`, obs.Price, obs.Currency, available, obs.Status, obs.Detail,
+		obs.ImageURL, obs.Description, obs.ItemID, stamp(obs.ObservedAt))
+	if err != nil {
+		return fmt.Errorf("updating observation for %s: %w", obs.ItemID, err)
+	}
+
+	// Update items table queue point if appropriate
+	var point Point
+	var next time.Time
+	switch outcome {
+	case OutcomePriced:
+		point, next = PointDone, now.Add(RefreshAfter)
+	case OutcomeNoData:
+		point, next = PointFailed, now.Add(RetryAfterNoData)
+	case OutcomeUnavailable:
+		point, next = PointUnavailable, now.Add(RefreshAfter)
+	case OutcomeDead:
+		point, next = PointDead, now.Add(100*365*24*time.Hour)
+	default:
+		// Don't modify item state on unhandled or unchanged outcome
+		return tx.Commit()
+	}
+
+	_, err = tx.Exec(`
+		UPDATE items
+		SET point = ?,
+		    next_try_at = ?
+		WHERE item_id = ?
+	`, point, stamp(next), obs.ItemID)
+	if err != nil {
+		return fmt.Errorf("updating item %s state: %w", obs.ItemID, err)
+	}
+
+	return tx.Commit()
+}

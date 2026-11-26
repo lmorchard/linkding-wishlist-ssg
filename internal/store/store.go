@@ -76,6 +76,7 @@ type Observation struct {
 	ImageURL    string
 	Description string
 	RawPayload  string
+	URL         string // joined from items table for reporting / re-extracting
 }
 
 // Item is a scrape target and its queue state.
