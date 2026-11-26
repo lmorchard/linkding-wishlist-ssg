@@ -1,6 +1,7 @@
 package render
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 	"testing"
@@ -345,7 +346,7 @@ func TestSiteRendersArchivePages(t *testing.T) {
 	}
 }
 
-func TestSiteEmitsNoJavaScript(t *testing.T) {
+func TestSiteEmitsNoInlineEventHandlers(t *testing.T) {
 	items := []model.Item{
 		siteItem("a", "one.example", "One", time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)),
 		siteItem("b", "one.example", "Two", time.Date(2026, 11, 24, 11, 0, 0, 0, time.UTC)),
@@ -358,11 +359,82 @@ func TestSiteEmitsNoJavaScript(t *testing.T) {
 			continue
 		}
 		page := string(body)
-		if strings.Contains(page, "<script") {
-			t.Fatalf("%s contains a script element", name)
-		}
 		if onAttribute.MatchString(page) {
 			t.Fatalf("%s contains an inline event handler", name)
 		}
+	}
+}
+
+func TestSiteEmitsDataScriptAndEnhancement(t *testing.T) {
+	items := []model.Item{
+		siteItem("a", "one.example", "One", time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)),
+	}
+
+	site := renderSite(t, items)
+	indexHTML := string(site["index.html"])
+
+	if !strings.Contains(indexHTML, `<script id="wishlist-data" type="application/json">`) {
+		t.Fatal("index.html missing wishlist-data script element")
+	}
+	if !strings.Contains(indexHTML, `src="/assets/wishlist.js"`) {
+		t.Fatal("index.html missing wishlist.js script reference")
+	}
+	if _, ok := site["assets/wishlist.js"]; !ok {
+		t.Fatal("site missing assets/wishlist.js")
+	}
+}
+
+func TestBuildItemsJSONFormat(t *testing.T) {
+	price := 19.99
+	currency := "USD"
+	items := []model.Item{
+		{
+			ID:          "test1",
+			Title:       "Test Widget",
+			URL:         "https://example.com/widget",
+			StoreKey:    "example.com",
+			StoreLabel:  "Example Store",
+			Description: "A great widget for testing",
+			ImageURL:    "https://example.com/thumb.jpg",
+			Tags:        []string{"wishlist", "gadgets"},
+			Unavailable: false,
+			AddedAt:     time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC),
+			Overrides: model.Overrides{
+				Price:    &price,
+				Currency: &currency,
+			},
+		},
+	}
+
+	rawJSON := buildItemsJSON(items, map[string]string{"example.com": "/store/example.com/"}, "/")
+	var parsed []itemJSONView
+	if err := json.Unmarshal([]byte(rawJSON), &parsed); err != nil {
+		t.Fatalf("unmarshaling buildItemsJSON output: %v", err)
+	}
+
+	if len(parsed) != 1 {
+		t.Fatalf("parsed length = %d, want 1", len(parsed))
+	}
+	it := parsed[0]
+	if it.ID != "test1" || it.Title != "Test Widget" || it.Store != "Example Store" {
+		t.Errorf("unexpected fields: %+v", it)
+	}
+	if it.Price == nil || *it.Price != 19.99 {
+		t.Errorf("price = %v, want 19.99", it.Price)
+	}
+	if it.PriceLabel != "USD 19.99" {
+		t.Errorf("price_label = %q, want 'USD 19.99'", it.PriceLabel)
+	}
+	if it.ImageURL != "https://example.com/thumb.jpg" {
+		t.Errorf("image_url = %q, want 'https://example.com/thumb.jpg'", it.ImageURL)
+	}
+	if it.Description != "A great widget for testing" {
+		t.Errorf("description = %q, want 'A great widget for testing'", it.Description)
+	}
+	if len(it.Tags) != 2 || it.Tags[1] != "gadgets" {
+		t.Errorf("tags = %v, want ['wishlist', 'gadgets']", it.Tags)
+	}
+	if it.Unavailable {
+		t.Error("expected Unavailable = false")
 	}
 }

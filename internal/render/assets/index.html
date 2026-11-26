@@ -12,6 +12,7 @@
 {{if .Years}}<span class="views-label">Archive</span>
 {{range .Years}}<a href="{{.Href}}">{{.Label}}</a>
 {{end}}{{end}}</nav>
+<div id="wishlist-app">
 {{if .PinnedDays}}<section class="pinned">
 <h2 class="pinned-heading">Pinned</h2>
 {{template "daylist" .PinnedDays}}
@@ -20,4 +21,9 @@
 {{if and .PinnedDays .Days}}<h2 class="stream-heading">Recent</h2>
 {{end}}{{template "daylist" .Days}}
 </section>
+</div>
+{{if .ItemsJSON}}<script id="wishlist-data" type="application/json">
+{{.ItemsJSON}}
+</script>
+{{end}}
 {{template "footer" .}}{{end}}

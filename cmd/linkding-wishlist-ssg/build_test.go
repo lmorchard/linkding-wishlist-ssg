@@ -184,8 +184,8 @@ func TestBuildAgainstFixtures(t *testing.T) {
 	if strings.Contains(index, "Archived Want") {
 		t.Fatal("archived bookmark rendered by default")
 	}
-	if strings.Contains(index, "<script") {
-		t.Fatal("index contains a script element")
+	if !strings.Contains(index, `<script id="wishlist-data" type="application/json">`) {
+		t.Fatal("index missing wishlist-data script element")
 	}
 	onAttribute := regexp.MustCompile(`(?i)\son[a-z]+\s*=`)
 	if onAttribute.MatchString(index) {

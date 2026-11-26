@@ -1,7 +1,13 @@
 {{define "store"}}{{template "head" .}}
 <nav class="back"><a href="{{.HomeHref}}">All items</a></nav>
 <h1>{{.Heading}}</h1>
+<div id="wishlist-app">
 <div class="cards">
 {{range .Cards}}{{template "card" .}}
 {{end}}</div>
+</div>
+{{if .ItemsJSON}}<script id="wishlist-data" type="application/json">
+{{.ItemsJSON}}
+</script>
+{{end}}
 {{template "footer" .}}{{end}}
