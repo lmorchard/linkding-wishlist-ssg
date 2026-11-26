@@ -95,3 +95,28 @@ func TestAmazonExtraction(t *testing.T) {
 func ptrFloat(v float64) *float64 {
 	return &v
 }
+
+func TestAmazonExtractsImageAndDescription(t *testing.T) {
+	raw := AmazonRaw{
+		Title:       "Test Amazon Product",
+		Offscreen:   "$25.00",
+		AvailText:   "In Stock",
+		ImageURL:    "https://m.media-amazon.com/images/I/sample.jpg",
+		Description: "Great features and long battery life.",
+		RawHTML:     "<div id='dp'>...</div>",
+	}
+
+	res, err := Amazon(raw)
+	if err != nil {
+		t.Fatalf("Amazon error: %v", err)
+	}
+	if res.ImageURL != raw.ImageURL {
+		t.Errorf("ImageURL = %q, want %q", res.ImageURL, raw.ImageURL)
+	}
+	if res.Description != raw.Description {
+		t.Errorf("Description = %q, want %q", res.Description, raw.Description)
+	}
+	if res.RawPayload != raw.RawHTML {
+		t.Errorf("RawPayload = %q, want %q", res.RawPayload, raw.RawHTML)
+	}
+}

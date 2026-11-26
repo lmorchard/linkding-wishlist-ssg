@@ -86,9 +86,12 @@ func TestBrowserClientMock(t *testing.T) {
 						"result": map[string]interface{}{
 							"result": map[string]interface{}{
 								"value": map[string]interface{}{
-									"offscreen": "$19.99",
-									"availText": "In Stock",
-									"title":     "Test Mock Product",
+									"offscreen":   "$19.99",
+									"availText":   "In Stock",
+									"title":       "Test Mock Product",
+									"imageUrl":    "https://example.com/test.jpg",
+									"description": "Mock description",
+									"rawHtml":     "<div>mock html</div>",
 								},
 							},
 						},
@@ -116,5 +119,15 @@ func TestBrowserClientMock(t *testing.T) {
 	}
 	if res.Currency != "USD" {
 		t.Errorf("currency = %q, want 'USD'", res.Currency)
+	}
+
+	if res.ImageURL != "https://example.com/test.jpg" {
+		t.Errorf("imageURL = %q, want 'https://example.com/test.jpg'", res.ImageURL)
+	}
+	if res.Description != "Mock description" {
+		t.Errorf("description = %q, want 'Mock description'", res.Description)
+	}
+	if res.RawPayload != "<div>mock html</div>" {
+		t.Errorf("rawPayload = %q, want '<div>mock html</div>'", res.RawPayload)
 	}
 }

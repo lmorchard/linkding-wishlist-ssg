@@ -320,6 +320,13 @@ func (a *application) attempt(ctx context.Context, entry store.QueueEntry, cdpUR
 	}
 
 	obs.Source = result.Source
+	obs.ImageURL = result.ImageURL
+	obs.Description = result.Description
+	obs.RawPayload = result.RawPayload
+	if obs.RawPayload == "" {
+		obs.RawPayload = res.Body
+	}
+
 	// Availability is checked first and independently of price: a sold-out item
 	// often still shows its last price, and recording that price while leaving
 	// the item on the live list would be the wrong outcome.
@@ -361,6 +368,9 @@ func (a *application) attemptBrowser(ctx context.Context, entry store.QueueEntry
 	}
 
 	obs.Source = result.Source
+	obs.ImageURL = result.ImageURL
+	obs.Description = result.Description
+	obs.RawPayload = result.RawPayload
 	if result.Status == "blocked" {
 		obs.Status = "blocked"
 		obs.Detail = result.Detail

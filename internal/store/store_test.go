@@ -278,3 +278,63 @@ func TestUnavailableIsRetriedButNeverADeadEnd(t *testing.T) {
 		t.Errorf("Dead = %d, want 0 — unavailable is not the same as gone", p.Dead)
 	}
 }
+
+func TestStoreRetainsImageDescriptionAndRawPayload(t *testing.T) {
+	db := openTemp(t)
+	now := at("2026-11-26T12:00:00Z")
+	seed(t, db, []Item{
+		{ItemID: "item1", URL: "https://shop.example/1", Host: "shop.example", AddedAt: now},
+	})
+
+	price := 29.99
+	avail := true
+	obs := Observation{
+		ItemID:      "item1",
+		ObservedAt:  now,
+		Price:       &price,
+		Currency:    "USD",
+		Available:   &avail,
+		Source:      "jsonld",
+		Status:      "priced",
+		Detail:      "ok",
+		ImageURL:    "https://shop.example/img.jpg",
+		Description: "A fine widget for all your needs.",
+		RawPayload:  "<html>raw payload here</html>",
+	}
+
+	if err := Record(db, obs, OutcomePriced, now); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	got, ok, err := LatestObservation(db, "item1")
+	if err != nil {
+		t.Fatalf("LatestObservation: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected observation to be found")
+	}
+	if got.ImageURL != obs.ImageURL {
+		t.Errorf("ImageURL = %q, want %q", got.ImageURL, obs.ImageURL)
+	}
+	if got.Description != obs.Description {
+		t.Errorf("Description = %q, want %q", got.Description, obs.Description)
+	}
+	if got.RawPayload != obs.RawPayload {
+		t.Errorf("RawPayload = %q, want %q", got.RawPayload, obs.RawPayload)
+	}
+
+	prices, err := LatestPrices(db)
+	if err != nil {
+		t.Fatalf("LatestPrices: %v", err)
+	}
+	pObs, ok := prices["item1"]
+	if !ok {
+		t.Fatal("item1 missing from LatestPrices")
+	}
+	if pObs.ImageURL != obs.ImageURL {
+		t.Errorf("LatestPrices ImageURL = %q, want %q", pObs.ImageURL, obs.ImageURL)
+	}
+	if pObs.Description != obs.Description {
+		t.Errorf("LatestPrices Description = %q, want %q", pObs.Description, obs.Description)
+	}
+}

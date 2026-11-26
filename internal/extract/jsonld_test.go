@@ -205,3 +205,53 @@ func TestOutOfStockWithPriceStillReportsUnavailable(t *testing.T) {
 		t.Fatal("the last known price should still be captured")
 	}
 }
+
+func TestJSONLDExtractsImageAndDescription(t *testing.T) {
+	doc := page(`{
+		"@type": "Product",
+		"name": "Super Coffee Grinder",
+		"description": "Conical burr grinder with 40 settings.",
+		"image": "https://example.com/grinder.jpg",
+		"offers": {
+			"price": "99.00",
+			"priceCurrency": "USD",
+			"availability": "https://schema.org/InStock"
+		}
+	}`)
+
+	got, err := JSONLD(doc)
+	if err != nil {
+		t.Fatalf("JSONLD: %v", err)
+	}
+	if got.ImageURL != "https://example.com/grinder.jpg" {
+		t.Errorf("ImageURL = %q, want 'https://example.com/grinder.jpg'", got.ImageURL)
+	}
+	if got.Description != "Conical burr grinder with 40 settings." {
+		t.Errorf("Description = %q, want 'Conical burr grinder with 40 settings.'", got.Description)
+	}
+	if got.RawPayload == "" {
+		t.Error("expected RawPayload to retain the raw json block")
+	}
+}
+
+func TestJSONLDExtractsImageFromArrayAndObject(t *testing.T) {
+	doc1 := page(`{
+		"@type": "Product",
+		"image": ["https://example.com/first.jpg", "https://example.com/second.jpg"],
+		"offers": {"price": "10.00", "priceCurrency": "USD"}
+	}`)
+	got1, err := JSONLD(doc1)
+	if err != nil || got1.ImageURL != "https://example.com/first.jpg" {
+		t.Errorf("got ImageURL = %q, want first.jpg", got1.ImageURL)
+	}
+
+	doc2 := page(`{
+		"@type": "Product",
+		"image": {"@type": "ImageObject", "url": "https://example.com/obj.jpg"},
+		"offers": {"price": "10.00", "priceCurrency": "USD"}
+	}`)
+	got2, err := JSONLD(doc2)
+	if err != nil || got2.ImageURL != "https://example.com/obj.jpg" {
+		t.Errorf("got ImageURL = %q, want obj.jpg", got2.ImageURL)
+	}
+}

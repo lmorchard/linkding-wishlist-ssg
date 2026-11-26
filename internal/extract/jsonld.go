@@ -55,6 +55,9 @@ type Result struct {
 	Availability Availability
 	Source       string
 	Detail       string
+	ImageURL     string
+	Description  string
+	RawPayload   string
 }
 
 // ErrNoDocument means the caller passed nothing to parse, which is a programming
@@ -92,6 +95,7 @@ func JSONLD(document string) (Result, error) {
 		}
 		if r, ok := findOffer(doc); ok {
 			r.Source = "jsonld"
+			r.RawPayload = raw
 			return r, nil
 		}
 	}
@@ -160,6 +164,9 @@ func offerFromProduct(p map[string]any) (Result, bool) {
 		return Result{}, false
 	}
 
+	imageURL := imageOf(p)
+	desc, _ := p["description"].(string)
+
 	for _, o := range flatten(offers) {
 		m, ok := o.(map[string]any)
 		if !ok {
@@ -169,7 +176,16 @@ func offerFromProduct(p map[string]any) (Result, bool) {
 		if !ok {
 			continue
 		}
-		r := Result{Status: "priced", Price: &price}
+		r := Result{
+			Status:      "priced",
+			Price:       &price,
+			ImageURL:    imageURL,
+			Description: strings.TrimSpace(desc),
+		}
+		// If offer itself has an image, let that override product image
+		if offerImg := imageOf(m); offerImg != "" {
+			r.ImageURL = offerImg
+		}
 		// The offer's own currency wins; the specification's is a fallback
 		// because some shops put it only there.
 		if s, ok := m["priceCurrency"].(string); ok {
@@ -184,6 +200,35 @@ func offerFromProduct(p map[string]any) (Result, bool) {
 		return r, true
 	}
 	return Result{}, false
+}
+
+// imageOf extracts a single image URL from an object, which schema.org defines
+// as a string, a list of strings, or an ImageObject with a url field.
+func imageOf(m map[string]any) string {
+	val := m["image"]
+	if val == nil {
+		return ""
+	}
+	switch v := val.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case []any:
+		if len(v) > 0 {
+			if s, ok := v[0].(string); ok {
+				return strings.TrimSpace(s)
+			}
+			if obj, ok := v[0].(map[string]any); ok {
+				if s, ok := obj["url"].(string); ok {
+					return strings.TrimSpace(s)
+				}
+			}
+		}
+	case map[string]any:
+		if s, ok := v["url"].(string); ok {
+			return strings.TrimSpace(s)
+		}
+	}
+	return ""
 }
 
 // flatten unwraps a single value or an array into a slice.

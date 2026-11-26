@@ -47,6 +47,7 @@ type Item struct {
 	// renders on store, tag, and archive pages — the want was real — but it is
 	// held out of the front-page stream so the main view stays a live list.
 	Unavailable bool
+	ImageURL    string
 }
 
 // Store is a derived collection of items sharing a store key.
