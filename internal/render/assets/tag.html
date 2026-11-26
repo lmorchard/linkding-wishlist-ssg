@@ -4,5 +4,11 @@
 <a href="{{.HomeHref}}">Wishlist</a>
 <a href="{{.TagsHref}}">All tags</a>
 </nav>
+<div id="wishlist-app">
 {{template "daylist" .Days}}
+</div>
+{{if .ItemsJSON}}<script id="wishlist-data" type="application/json">
+{{.ItemsJSON}}
+</script>
+{{end}}
 {{template "footer" .}}{{end}}

@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}}</title>
 <link rel="stylesheet" href="{{.CSSHref}}">
-</head>
+{{if .JSHref}}<script defer src="{{.JSHref}}"></script>
+{{end}}</head>
 <body>
 <header class="site-header">
 <a class="site-title" href="{{.HomeHref}}">Wishlist</a>
@@ -14,12 +15,15 @@
 {{end}}
 
 {{define "card"}}<article class="card">
+{{if .ImageURL}}<div class="card-thumb"><img src="{{.ImageURL}}" alt="" loading="lazy" referrerpolicy="no-referrer"></div>
+{{end}}<div class="card-body">
 <h3 class="card-title"><a href="{{.URL}}">{{.Title}}</a></h3>
 <p class="card-store"><a href="{{.StoreHref}}">{{.StoreLabel}}</a></p>
 {{if .Variant}}<p class="card-variant">{{.Variant}}</p>
 {{end}}{{if .Price}}<p class="card-price">{{.Price}}</p>
+{{end}}{{if .Description}}<p class="card-desc">{{.Description}}</p>
 {{end}}{{if .Archived}}<p class="card-archived">archived</p>
-{{end}}</article>{{end}}
+{{end}}</div></article>{{end}}
 
 {{define "footer"}}</main>
 <footer class="site-footer">

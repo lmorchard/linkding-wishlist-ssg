@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Wishlist</title>
 <link rel="stylesheet" href="/assets/style.css">
+<script defer src="/assets/wishlist.js"></script>
 </head>
 <body>
 <header class="site-header">
@@ -26,6 +27,7 @@
 <span class="views-label">Archive</span>
 <a href="/archive/2026/">2026</a>
 </nav>
+<div id="wishlist-app">
 <section class="stream">
 <section class="day">
 <h2>November 6, 2026</h2>
@@ -33,9 +35,10 @@
 <summary><a class="run-store" href="/store/bookshop.org/">bookshop.org</a> <span class="run-count">1 item</span> <span class="run-range">November 6, 2026</span></summary>
 <div class="cards">
 <article class="card">
+<div class="card-body">
 <h3 class="card-title"><a href="https://bookshop.org/books/second-priority">Second Priority</a></h3>
 <p class="card-store"><a href="/store/bookshop.org/">bookshop.org</a></p>
-</article>
+</div></article>
 </div>
 </details>
 
@@ -46,9 +49,10 @@
 <summary><a class="run-store" href="/store/sevensisterspdx.com/">Seven Sisters</a> <span class="run-count">1 item</span> <span class="run-range">November 5, 2026</span></summary>
 <div class="cards">
 <article class="card">
+<div class="card-body">
 <h3 class="card-title"><a href="https://www.sevensisterspdx.com/shop/sardine-head-salt-bowl">Sardine Head Salt Bowl</a></h3>
 <p class="card-store"><a href="/store/sevensisterspdx.com/">Seven Sisters</a></p>
-</article>
+</div></article>
 </div>
 </details>
 
@@ -59,9 +63,10 @@
 <summary><a class="run-store" href="/store/example.com/">example.com</a> <span class="run-count">1 item</span> <span class="run-range">November 4, 2026</span></summary>
 <div class="cards">
 <article class="card">
+<div class="card-body">
 <h3 class="card-title"><a href="https://example.com/malformed">Malformed Override</a></h3>
 <p class="card-store"><a href="/store/example.com/">example.com</a></p>
-</article>
+</div></article>
 </div>
 </details>
 
@@ -72,9 +77,10 @@
 <summary><a class="run-store" href="/store/example.com/">example.com</a> <span class="run-count">1 item</span> <span class="run-range">November 3, 2026</span></summary>
 <div class="cards">
 <article class="card">
+<div class="card-body">
 <h3 class="card-title"><a href="https://example.com/a-book">a-book</a></h3>
 <p class="card-store"><a href="/store/example.com/">example.com</a></p>
-</article>
+</div></article>
 </div>
 </details>
 
@@ -85,9 +91,11 @@
 <summary><a class="run-store" href="/store/bookshop.org/">bookshop.org</a> <span class="run-count">1 item</span> <span class="run-range">November 2, 2026</span></summary>
 <div class="cards">
 <article class="card">
+<div class="card-body">
 <h3 class="card-title"><a href="https://bookshop.org/books/the-book">The Book</a></h3>
 <p class="card-store"><a href="/store/bookshop.org/">bookshop.org</a></p>
-</article>
+<p class="card-desc">A novel</p>
+</div></article>
 </div>
 </details>
 
@@ -98,11 +106,12 @@
 <summary><a class="run-store" href="/store/sevensisterspdx.com/">Seven Sisters</a> <span class="run-count">1 item</span> <span class="run-range">November 1, 2026</span></summary>
 <div class="cards">
 <article class="card">
+<div class="card-body">
 <h3 class="card-title"><a href="https://www.sevensisterspdx.com/">Seven Sisters</a></h3>
 <p class="card-store"><a href="/store/sevensisterspdx.com/">Seven Sisters</a></p>
 <p class="card-variant">small, green</p>
 <p class="card-price">USD 42.00</p>
-</article>
+</div></article>
 </div>
 </details>
 
@@ -113,9 +122,10 @@
 <summary><a class="run-store" href="/store/unknown/">unknown</a> <span class="run-count">1 item</span> <span class="run-range">September 2, 2026</span></summary>
 <div class="cards">
 <article class="card">
+<div class="card-body">
 <h3 class="card-title"><a href="http://[::1">Broken URL</a></h3>
 <p class="card-store"><a href="/store/unknown/">unknown</a></p>
-</article>
+</div></article>
 </div>
 </details>
 
@@ -126,15 +136,21 @@
 <summary><a class="run-store" href="/store/example.com/">example.com</a> <span class="run-count">1 item</span> <span class="run-range">September 1, 2026</span></summary>
 <div class="cards">
 <article class="card">
+<div class="card-body">
 <h3 class="card-title"><a href="https://example.com/">example.com</a></h3>
 <p class="card-store"><a href="/store/example.com/">example.com</a></p>
-</article>
+</div></article>
 </div>
 </details>
 
 </section>
 
 </section>
+</div>
+<script id="wishlist-data" type="application/json">
+[{"id":"7f86e654f4ba","title":"Seven Sisters","url":"https://www.sevensisterspdx.com/","store":"Seven Sisters","store_href":"/store/sevensisterspdx.com/","price":42,"currency":"USD","price_label":"USD 42.00","tags":["wishlist"],"added_at":"2026-11-01T09:14:22Z"},{"id":"9fb7265b91c2","title":"Second Priority","url":"https://bookshop.org/books/second-priority","store":"bookshop.org","store_href":"/store/bookshop.org/","tags":["wishlist","wishlist:book"],"added_at":"2026-11-06T10:00:00Z"},{"id":"4fcb01c47e28","title":"Sardine Head Salt Bowl","url":"https://www.sevensisterspdx.com/shop/sardine-head-salt-bowl","store":"Seven Sisters","store_href":"/store/sevensisterspdx.com/","tags":["wishlist","wishlist:kitchen"],"added_at":"2026-11-05T10:00:00Z"},{"id":"8ebee59c9743","title":"Malformed Override","url":"https://example.com/malformed","store":"example.com","store_href":"/store/example.com/","tags":["wishlist","wishlist:book"],"added_at":"2026-11-04T10:00:00Z"},{"id":"6d2f68d82922","title":"a-book","url":"https://example.com/a-book","store":"example.com","store_href":"/store/example.com/","tags":["wishlist","wishlist:book"],"added_at":"2026-11-03T10:00:00Z"},{"id":"1d797314e542","title":"The Book","url":"https://bookshop.org/books/the-book","store":"bookshop.org","store_href":"/store/bookshop.org/","description":"A novel","tags":["wishlist","wishlist:book:fiction"],"added_at":"2026-11-02T10:00:00Z"},{"id":"3cbaea5b5bab","title":"Broken URL","url":"http://[::1","store":"unknown","store_href":"/store/unknown/","tags":["wishlist","wishlist:book"],"added_at":"2026-09-02T10:00:00Z"},{"id":"0f115db062b7","title":"example.com","url":"https://example.com/","store":"example.com","store_href":"/store/example.com/","tags":["wishlist"],"added_at":"2026-09-01T10:00:00Z"}]
+</script>
+
 </main>
 <footer class="site-footer">
 <p>Generated from Linkding bookmarks tagged <code>wishlist</code>.</p>

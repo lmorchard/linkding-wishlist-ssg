@@ -5,6 +5,7 @@ package render
 import (
 	"bytes"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/url"
@@ -40,6 +41,11 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 		return nil, fmt.Errorf("reading embedded CSS: %w", err)
 	}
 
+	js, err := assetsFS.ReadFile("assets/wishlist.js")
+	if err != nil {
+		return nil, fmt.Errorf("reading embedded JS: %w", err)
+	}
+
 	itemsByID := make(map[string]model.Item, len(dataset.Items))
 	storePaths := make(map[string]string, len(dataset.Stores))
 	for _, store := range dataset.Stores {
@@ -49,8 +55,9 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 		itemsByID[item.ID] = item
 	}
 
-	files := make(map[string][]byte, 1+len(dataset.Stores)+len(dataset.Facets)+1)
+	files := make(map[string][]byte, 2+len(dataset.Stores)+len(dataset.Facets)+1)
 	files["assets/style.css"] = css
+	files["assets/wishlist.js"] = js
 
 	base := opts.BaseURL
 	archives := buildArchives(dataset.Items)
@@ -66,6 +73,7 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 		Title:      "Wishlist",
 		Heading:    "Wishlist",
 		CSSHref:    joinBase(base, "/assets/style.css"),
+		JSHref:     joinBase(base, "/assets/wishlist.js"),
 		HomeHref:   joinBase(base, "/"),
 		StoresHref: joinBase(base, "/stores/"),
 		Tag:        opts.Tag,
@@ -73,6 +81,7 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 		Days:       buildDays(stream, storePaths, base, opts.Config.CollapseThreshold),
 		PinnedTag:  opts.Config.PinnedTag,
 		TagsHref:   joinBase(base, "/tags/"),
+		ItemsJSON:  buildItemsJSON(append(pinned, stream...), storePaths, base),
 	}
 	for _, facet := range dataset.Facets {
 		view.Facets = append(view.Facets, facetLinkView{
@@ -108,6 +117,14 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 			}
 			storeView.Cards = append(storeView.Cards, cardFor(item, storePaths, base))
 		}
+		var storeItems []model.Item
+		for _, id := range store.ItemIDs {
+			if item, ok := itemsByID[id]; ok {
+				storeItems = append(storeItems, item)
+			}
+		}
+		storeView.ItemsJSON = buildItemsJSON(storeItems, storePaths, base)
+		storeView.JSHref = joinBase(base, "/assets/wishlist.js")
 		page, err := execute(tmpl, "store", storeView)
 		if err != nil {
 			return nil, err
@@ -130,6 +147,14 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 			}
 			facetView.Cards = append(facetView.Cards, cardFor(item, storePaths, base))
 		}
+		var facetItems []model.Item
+		for _, id := range facet.ItemIDs {
+			if item, ok := itemsByID[id]; ok {
+				facetItems = append(facetItems, item)
+			}
+		}
+		facetView.ItemsJSON = buildItemsJSON(facetItems, storePaths, base)
+		facetView.JSHref = joinBase(base, "/assets/wishlist.js")
 		page, err := execute(tmpl, "facet", facetView)
 		if err != nil {
 			return nil, err
@@ -179,13 +204,15 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 
 	for _, collection := range tags {
 		tagView := pageView{
-			Title:    collection.Name + " — Wishlist",
-			Heading:  collection.Name,
-			CSSHref:  joinBase(base, "/assets/style.css"),
-			HomeHref: joinBase(base, "/"),
-			Tag:      opts.Tag,
-			TagsHref: joinBase(base, "/tags/"),
-			Days:     buildDays(collection.Items, storePaths, base, opts.Config.CollapseThreshold),
+			Title:     collection.Name + " — Wishlist",
+			Heading:   collection.Name,
+			CSSHref:   joinBase(base, "/assets/style.css"),
+			JSHref:    joinBase(base, "/assets/wishlist.js"),
+			HomeHref:  joinBase(base, "/"),
+			Tag:       opts.Tag,
+			TagsHref:  joinBase(base, "/tags/"),
+			Days:      buildDays(collection.Items, storePaths, base, opts.Config.CollapseThreshold),
+			ItemsJSON: buildItemsJSON(collection.Items, storePaths, base),
 		}
 		page, err := execute(tmpl, "tag", tagView)
 		if err != nil {
@@ -199,6 +226,7 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 			Title:    fmt.Sprintf("%d — Wishlist", year.Year),
 			Heading:  strconv.Itoa(year.Year),
 			CSSHref:  joinBase(base, "/assets/style.css"),
+			JSHref:   joinBase(base, "/assets/wishlist.js"),
 			HomeHref: joinBase(base, "/"),
 			Tag:      opts.Tag,
 		}
@@ -211,6 +239,7 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 			yearItems = append(yearItems, month.Items...)
 		}
 		yearView.Days = buildDays(yearItems, storePaths, base, opts.Config.CollapseThreshold)
+		yearView.ItemsJSON = buildItemsJSON(yearItems, storePaths, base)
 
 		yearPath := archiveYearPath(year.Year)
 		yearHTML, err := execute(tmpl, "archive", yearView)
@@ -224,11 +253,13 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 				Title:     monthLabel(month.Year, month.Month) + " — Wishlist",
 				Heading:   monthLabel(month.Year, month.Month),
 				CSSHref:   joinBase(base, "/assets/style.css"),
+				JSHref:    joinBase(base, "/assets/wishlist.js"),
 				HomeHref:  joinBase(base, "/"),
 				Tag:       opts.Tag,
 				YearHref:  joinBase(base, archiveYearPath(year.Year)),
 				YearLabel: strconv.Itoa(year.Year),
 				Days:      buildDays(month.Items, storePaths, base, opts.Config.CollapseThreshold),
+				ItemsJSON: buildItemsJSON(month.Items, storePaths, base),
 			}
 			monthPath := archiveMonthPath(month.Year, month.Month)
 			monthHTML, err := execute(tmpl, "archive", monthView)
@@ -248,6 +279,7 @@ type pageView struct {
 	CSSHref  string
 	HomeHref string
 	Tag      string
+	JSHref   string
 
 	PinnedDays []dayView
 	PinnedTag  string
@@ -265,6 +297,24 @@ type pageView struct {
 	StoresHref string
 	YearHref   string
 	YearLabel  string
+
+	ItemsJSON template.JS
+}
+
+type itemJSONView struct {
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	URL         string   `json:"url"`
+	Store       string   `json:"store"`
+	StoreHref   string   `json:"store_href"`
+	Price       *float64 `json:"price,omitempty"`
+	Currency    string   `json:"currency,omitempty"`
+	PriceLabel  string   `json:"price_label,omitempty"`
+	ImageURL    string   `json:"image_url,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+	Unavailable bool     `json:"unavailable,omitempty"`
+	AddedAt     string   `json:"added_at"`
 }
 
 type facetLinkView struct {
@@ -273,22 +323,28 @@ type facetLinkView struct {
 }
 
 type cardView struct {
-	Title      string
-	URL        string
-	StoreLabel string
-	StoreHref  string
-	Variant    string
-	Price      string
-	Archived   bool
+	Title       string
+	URL         string
+	StoreLabel  string
+	StoreHref   string
+	Variant     string
+	Price       string
+	ImageURL    string
+	Description string
+	Unavailable bool
+	Archived    bool
 }
 
 func cardFor(item model.Item, storePaths map[string]string, base string) cardView {
 	card := cardView{
-		Title:      item.DisplayTitle(),
-		URL:        item.URL,
-		StoreLabel: item.StoreLabel,
-		StoreHref:  joinBase(base, storePathFor(item, storePaths)),
-		Archived:   item.Archived,
+		Title:       item.DisplayTitle(),
+		URL:         item.URL,
+		StoreLabel:  item.StoreLabel,
+		StoreHref:   joinBase(base, storePathFor(item, storePaths)),
+		ImageURL:    item.ImageURL,
+		Description: item.Description,
+		Unavailable: item.Unavailable,
+		Archived:    item.Archived,
 	}
 	if card.StoreLabel == "" {
 		card.StoreLabel = item.StoreKey
@@ -390,4 +446,36 @@ func escapeSegment(segment string) string {
 	default:
 		return escaped
 	}
+}
+
+func buildItemsJSON(items []model.Item, storePaths map[string]string, base string) template.JS {
+	views := make([]itemJSONView, 0, len(items))
+	for _, it := range items {
+		v := itemJSONView{
+			ID:          it.ID,
+			Title:       it.DisplayTitle(),
+			URL:         it.URL,
+			Store:       it.StoreLabel,
+			StoreHref:   joinBase(base, storePathFor(it, storePaths)),
+			ImageURL:    it.ImageURL,
+			Description: it.Description,
+			Tags:        it.Tags,
+			Unavailable: it.Unavailable,
+			AddedAt:     it.AddedAt.Format(time.RFC3339),
+		}
+		if v.Store == "" {
+			v.Store = it.StoreKey
+		}
+		if it.HasPrice() {
+			v.Price = it.Overrides.Price
+			v.Currency = *it.Overrides.Currency
+			v.PriceLabel = v.Currency + " " + strconv.FormatFloat(*v.Price, 'f', 2, 64)
+		}
+		views = append(views, v)
+	}
+	bytes, err := json.Marshal(views)
+	if err != nil {
+		return template.JS("[]")
+	}
+	return template.JS(bytes)
 }
