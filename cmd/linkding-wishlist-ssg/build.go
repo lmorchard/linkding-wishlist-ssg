@@ -47,6 +47,8 @@ func (a *application) run(ctx context.Context, args []string) int {
 		return a.runBuild(ctx, args[1:])
 	case "scrape":
 		return a.runScrape(ctx, args[1:])
+	case "serve":
+		return a.runServe(ctx, args[1:])
 	case "help", "-h", "--help":
 		a.printUsage(a.stdout)
 		return 0
@@ -63,10 +65,12 @@ func (a *application) printUsage(w io.Writer) {
 Usage:
   linkding-wishlist-ssg build [flags]
   linkding-wishlist-ssg scrape [flags]
+  linkding-wishlist-ssg serve [flags]
 
 Commands:
   build    render bookmarks as a static site (Linkding is read-only)
   scrape   fetch prices for queued items into a local observation store
+  serve    start a local HTTP static file server to preview the generated site
 
 Scraping is a separate step from building. Run "scrape" from cron, then "build";
 the two are independent so a scrape failure cannot stop the site from rendering.
@@ -90,6 +94,10 @@ Front page and tag pages:
   --collapse-threshold int     fold same-store runs of at least this many items behind
                                <details>; 0 keeps every run expanded (default 0)
 
+Server flags (for "serve"):
+  --dir string                 directory of static files to serve (default "./build")
+  --addr string                address and port to bind (default ":8080")
+
   Every flag can also be set by environment variable; see below.
 
 Environment:
@@ -99,6 +107,8 @@ Environment:
   Every option above also reads an environment variable, prefixed
   LINKDING_WISHLIST_ and upper-cased with dashes as underscores:
 
+    --dir                  ->  LINKDING_WISHLIST_DIR
+    --addr                 ->  LINKDING_WISHLIST_ADDR
     --index-months         ->  LINKDING_WISHLIST_INDEX_MONTHS
     --pinned-tag           ->  LINKDING_WISHLIST_PINNED_TAG
     --tag-page-threshold   ->  LINKDING_WISHLIST_TAG_PAGE_THRESHOLD
