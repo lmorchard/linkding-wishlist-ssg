@@ -337,28 +337,30 @@ h2 a {
 }
 
 .col-thumb {
-  width: 48px;
-  min-width: 48px;
+  width: 72px;
+  min-width: 72px;
   text-align: center;
-  padding: 0.4rem !important;
+  padding: 0.5rem 0.6rem !important;
 }
 
 .table-thumb {
-  width: 40px;
-  height: 40px;
+  width: 64px;
+  height: 64px;
   object-fit: contain;
-  border-radius: 0.25rem;
+  border-radius: 0.35rem;
   background: #ffffff;
   border: 1px solid var(--border);
   display: block;
+  margin: 0 auto;
 }
 
 .table-thumb-placeholder {
-  width: 40px;
-  height: 40px;
-  border-radius: 0.25rem;
+  width: 64px;
+  height: 64px;
+  border-radius: 0.35rem;
   background: var(--bg);
   border: 1px dashed var(--border);
+  margin: 0 auto;
 }
 
 .col-title {
@@ -470,9 +472,10 @@ h2 a {
 }
 
 /* --- Card View Enhancements --- */
-.card-thumb {
+.card-thumb,
+.grid-card-thumb {
   width: 100%;
-  height: 160px;
+  height: 180px;
   background: #ffffff;
   border-bottom: 1px solid var(--border);
   margin: -1rem -1rem 0.75rem;
@@ -484,13 +487,22 @@ h2 a {
   justify-content: center;
 }
 
-.card-thumb img {
+.card-thumb img,
+.grid-card-thumb img {
   max-width: 100%;
   max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
+  display: block;
 }
 
-.card-desc {
+.grid-card-thumb-empty {
+  display: none;
+}
+
+.card-desc,
+.grid-card-desc {
   color: var(--muted);
   font-size: 0.85rem;
   margin: 0.4rem 0 0;
@@ -500,7 +512,11 @@ h2 a {
   overflow: hidden;
 }
 
-/* --- Responsive Table Adjustments --- */
+.card-tags {
+  margin-top: 0.5rem;
+}
+
+/* --- Responsive Table & Grid Adjustments --- */
 @media (max-width: 768px) {
   .col-tags,
   .col-status,
@@ -509,5 +525,12 @@ h2 a {
   }
   .table-mobile-meta {
     display: block;
+  }
+  .cards {
+    grid-template-columns: 1fr;
+  }
+  .card-thumb,
+  .grid-card-thumb {
+    height: 160px;
   }
 }
