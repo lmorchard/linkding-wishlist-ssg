@@ -30,6 +30,7 @@ type scrapeOptions struct {
 	normalCap  int
 	carefulCap int
 	rootTag    string
+	cdpURL     string
 	dryRun     bool
 }
 
@@ -52,6 +53,7 @@ Flags:
 	fs.Int("normal-cap", 200, "maximum normal-tier items attempted per run")
 	fs.Int("careful-cap", 3, "maximum careful-tier (Amazon) items attempted per run")
 	fs.String("tag", "wishlist", "root selector tag used when seeding the queue")
+	fs.String("cdp-url", "", "CDP HTTP endpoint for browser-backed scraping (e.g. http://myriad-docker:9222)")
 	fs.Bool("dry-run", false, "list what would be attempted without fetching")
 
 	if wantsHelp(args) {
@@ -86,6 +88,7 @@ Flags:
 		normalCap:  resolve.Int("normal-cap"),
 		carefulCap: resolve.Int("careful-cap"),
 		rootTag:    resolve.String("tag"),
+		cdpURL:     resolve.String("cdp-url"),
 		dryRun:     resolve.Bool("dry-run"),
 	}
 	if opts.normalCap < 0 || opts.carefulCap < 0 {
@@ -127,8 +130,11 @@ func (a *application) scrape(ctx context.Context, opts scrapeOptions, envFile ma
 		// skipped in the loop. Careful hosts sort first, so a loop-level skip would
 		// break out before ever reaching the normal tier — "skip Amazon" would
 		// silently mean "do nothing".
+		//
+		// If no CDP URL is provided, careful tier is also excluded because we
+		// have no browser configured to safely scrape it.
 		exclude := map[store.Care]bool{}
-		if carefulDone >= opts.carefulCap {
+		if carefulDone >= opts.carefulCap || strings.TrimSpace(opts.cdpURL) == "" {
 			exclude[store.Careful] = true
 		}
 		if normalDone >= opts.normalCap {
@@ -164,7 +170,7 @@ func (a *application) scrape(ctx context.Context, opts scrapeOptions, envFile ma
 			continue
 		}
 
-		outcome, obs := a.attempt(ctx, entry)
+		outcome, obs := a.attempt(ctx, entry, opts.cdpURL)
 		attempted++
 		switch outcome {
 		case store.OutcomePriced:
@@ -267,7 +273,11 @@ func careFor(host string) store.Care {
 }
 
 // attempt fetches and extracts one entry.
-func (a *application) attempt(ctx context.Context, entry store.QueueEntry) (store.Outcome, store.Observation) {
+func (a *application) attempt(ctx context.Context, entry store.QueueEntry, cdpURL string) (store.Outcome, store.Observation) {
+	if entry.Care == store.Careful && strings.TrimSpace(cdpURL) != "" {
+		return a.attemptBrowser(ctx, entry, cdpURL)
+	}
+
 	obs := store.Observation{
 		ItemID: entry.ItemID, ObservedAt: a.now(), Status: "no_data", Source: "jsonld",
 	}
@@ -313,6 +323,55 @@ func (a *application) attempt(ctx context.Context, entry store.QueueEntry) (stor
 	// Availability is checked first and independently of price: a sold-out item
 	// often still shows its last price, and recording that price while leaving
 	// the item on the live list would be the wrong outcome.
+	if result.Availability.Unavailable() {
+		obs.Status = "unavailable"
+		obs.Price = result.Price
+		obs.Currency = result.Currency
+		obs.Available = result.Available
+		obs.Detail = string(result.Availability)
+		return store.OutcomeUnavailable, obs
+	}
+
+	if result.Status == "priced" {
+		obs.Status = "priced"
+		obs.Price = result.Price
+		obs.Currency = result.Currency
+		obs.Available = result.Available
+		return store.OutcomePriced, obs
+	}
+
+	obs.Status = "no_data"
+	obs.Detail = result.Detail
+	return store.OutcomeNoData, obs
+}
+
+// attemptBrowser fetches and extracts one careful entry (e.g. Amazon) using a
+// remote Chrome browser over CDP.
+func (a *application) attemptBrowser(ctx context.Context, entry store.QueueEntry, cdpURL string) (store.Outcome, store.Observation) {
+	obs := store.Observation{
+		ItemID: entry.ItemID, ObservedAt: a.now(), Status: "no_data", Source: "browser",
+	}
+
+	bClient := fetch.NewBrowserClient(cdpURL)
+	result, err := bClient.FetchAmazon(ctx, entry.URL)
+	if err != nil {
+		obs.Status = "error"
+		obs.Detail = err.Error()
+		return store.OutcomeError, obs
+	}
+
+	obs.Source = result.Source
+	if result.Status == "blocked" {
+		obs.Status = "blocked"
+		obs.Detail = result.Detail
+		return store.OutcomeBlocked, obs
+	}
+	if result.Status == "dead" {
+		obs.Status = "dead"
+		obs.Detail = result.Detail
+		return store.OutcomeDead, obs
+	}
+
 	if result.Availability.Unavailable() {
 		obs.Status = "unavailable"
 		obs.Price = result.Price
