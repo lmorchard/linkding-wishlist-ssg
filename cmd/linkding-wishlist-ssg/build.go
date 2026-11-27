@@ -21,6 +21,7 @@ import (
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/lint"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/manifest"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/model"
+	"github.com/lmorchard/linkding-wishlist-ssg/internal/pages"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/render"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/siteconfig"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/store"
@@ -152,6 +153,9 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 	// because the winner may come from the environment or .env instead.
 	fs.String("out", "./build", "output directory; created if absent, wiped if present")
 	fs.String("tag", "wishlist", "root selector tag")
+	fs.String("site-title", siteconfig.DefaultSiteTitle, "site header and title")
+	fs.String("pages-dir", "", "directory containing local markdown pages (e.g. data/pages)")
+	fs.String("header-links", "", "comma-separated Label=URL pairs to display in site header (e.g. \"About=https://example.com,Blog=https://blog.example.com\")")
 	fs.String("base-url", "/", "prefix for absolute links")
 	fs.Bool("include-archived", false, "include archived bookmarks (debugging only)")
 	fs.String("lint-format", "text", "lint report format: text or json")
@@ -210,6 +214,9 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 
 	outDir := resolve.String("out")
 	rootTag := resolve.String("tag")
+	siteTitle := resolve.String("site-title")
+	pagesDir := resolve.String("pages-dir")
+	headerLinksFlag := resolve.String("header-links")
 	baseURL := resolve.String("base-url")
 	includeArchived := resolve.Bool("include-archived")
 	lintFormat := resolve.String("lint-format")
@@ -246,11 +253,13 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 	}
 
 	siteCfg := siteconfig.Config{
+		SiteTitle:         strings.TrimSpace(siteTitle),
 		WindowMonths:      windowMonths,
 		PinnedTag:         strings.TrimSpace(pinnedTag),
 		TagPageThreshold:  tagThreshold,
 		CollapseThreshold: collapseThreshold,
 		ExcludedTags:      splitTags(excludedFlag),
+		HeaderLinks:       splitHeaderLinks(headerLinksFlag),
 	}
 
 	linkdingURL := strings.TrimSpace(a.envValue(envFile, "LINKDING_URL"))
@@ -367,11 +376,24 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 	dataset := cluster.Apply(items, rootTag)
 	findings := lint.Run(dataset.Items)
 
+	// If pagesDir wasn't explicitly given, check default data/pages
+	if pagesDir == "" {
+		if stat, serr := os.Stat("data/pages"); serr == nil && stat.IsDir() {
+			pagesDir = "data/pages"
+		}
+	}
+	customPages, perr := pages.Load(pagesDir)
+	if perr != nil {
+		fmt.Fprintf(a.stderr, "error: loading custom pages: %v\n", perr)
+		return 1
+	}
+
 	files, err := render.Site(dataset, render.Options{
-		BaseURL: normalizedBase,
-		Tag:     rootTag,
-		Config:  siteCfg,
-		Now:     a.now(),
+		BaseURL:     normalizedBase,
+		Tag:         rootTag,
+		Config:      siteCfg,
+		Now:         a.now(),
+		CustomPages: customPages,
 	})
 	if err != nil {
 		fmt.Fprintf(a.stderr, "error: rendering site: %v\n", err)
@@ -593,4 +615,30 @@ func (a *application) applyObservedPrices(items []model.Item, storePath string) 
 		priced++
 	}
 	return priced, unavailable
+}
+
+func splitHeaderLinks(raw string) []siteconfig.HeaderLink {
+	var links []siteconfig.HeaderLink
+	if strings.TrimSpace(raw) == "" {
+		return links
+	}
+	parts := strings.Split(raw, ",")
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+		eq := strings.Index(trimmed, "=")
+		if eq > 0 && eq < len(trimmed)-1 {
+			label := strings.TrimSpace(trimmed[:eq])
+			linkURL := strings.TrimSpace(trimmed[eq+1:])
+			if label != "" && linkURL != "" {
+				links = append(links, siteconfig.HeaderLink{
+					Label: label,
+					URL:   linkURL,
+				})
+			}
+		}
+	}
+	return links
 }

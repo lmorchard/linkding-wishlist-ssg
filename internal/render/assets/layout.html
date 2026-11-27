@@ -9,7 +9,12 @@
 {{end}}</head>
 <body>
 <header class="site-header">
-<a class="site-title" href="{{.HomeHref}}">Wishlist</a>
+<div class="site-header-inner">
+<a class="site-title" href="{{.HomeHref}}">{{.SiteTitle}}</a>
+{{if .HeaderLinks}}<nav class="site-nav">
+{{range .HeaderLinks}}<a href="{{.Href}}">{{.Label}}</a>
+{{end}}</nav>{{end}}
+</div>
 </header>
 <main>
 {{end}}

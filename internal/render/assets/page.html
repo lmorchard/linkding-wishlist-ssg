@@ -1,0 +1,8 @@
+{{define "page"}}{{template "head" .}}
+<article class="custom-page">
+<h1>{{.Heading}}</h1>
+<div class="custom-page-content">
+{{.ContentHTML}}
+</div>
+</article>
+{{template "footer" .}}{{end}}

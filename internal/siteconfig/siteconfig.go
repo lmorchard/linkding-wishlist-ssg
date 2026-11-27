@@ -11,6 +11,7 @@ import "time"
 
 // Defaults for every knob. Changing one of these changes the shipped site.
 const (
+	DefaultSiteTitle        = "Wishlist"
 	DefaultWindowMonths     = 12
 	DefaultPinnedTag        = "wishlist:featured"
 	DefaultTagPageThreshold = 3
@@ -26,8 +27,17 @@ var DefaultExcludedTags = []string{
 	"imported:*", // provenance: came from some import
 }
 
+// HeaderLink represents an arbitrary external or local link shown in the header navigation.
+type HeaderLink struct {
+	Label string
+	URL   string
+}
+
 // Config controls what the front page shows and which tag pages exist.
 type Config struct {
+	// SiteTitle is the main title displayed in the site header and page titles.
+	SiteTitle string
+
 	// WindowMonths is how far back the front page reaches. Zero or negative
 	// means no window: show everything.
 	//
@@ -52,11 +62,15 @@ type Config struct {
 	// ExcludedTags are omitted from the tag index. Supports a ":*" suffix
 	// meaning "any tag with this prefix".
 	ExcludedTags []string
+
+	// HeaderLinks are arbitrary links displayed in the site header navigation.
+	HeaderLinks []HeaderLink
 }
 
 // Default returns the shipped configuration.
 func Default() Config {
 	return Config{
+		SiteTitle:         DefaultSiteTitle,
 		WindowMonths:      DefaultWindowMonths,
 		PinnedTag:         DefaultPinnedTag,
 		TagPageThreshold:  DefaultTagPageThreshold,
