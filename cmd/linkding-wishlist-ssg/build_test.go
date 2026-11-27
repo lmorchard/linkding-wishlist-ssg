@@ -871,3 +871,80 @@ func TestApplyObservedPricesAndMetadata(t *testing.T) {
 		t.Errorf("item 1 Description = %q, want 'Existing description'", modelItems[1].Description)
 	}
 }
+
+func TestBuildWithCacheThumbs(t *testing.T) {
+	// Mock image server
+	tsImg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte("image-data-bytes"))
+	}))
+	defer tsImg.Close()
+
+	// Fixture linkding server
+	server, _ := startFixtureServer(t)
+
+	// Observation store with image
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "wishlist.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+
+	// Item ID corresponding to fixture bookmark
+	targetID := "4fcb01c47e28" // https://www.sevensisterspdx.com/shop/sardine-head-salt-bowl
+	now := fixedNow
+	price := 25.0
+	avail := true
+	obs := store.Observation{
+		ItemID:     targetID,
+		ObservedAt: now,
+		Price:      &price,
+		Currency:   "USD",
+		Available:  &avail,
+		Source:     "jsonld",
+		Status:     "priced",
+		ImageURL:   tsImg.URL + "/salt-bowl.png",
+	}
+	if err := store.Record(db, obs, store.OutcomePriced, now); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	app, stdout, stderr := newTestApp(server.URL)
+	app.httpClient = tsImg.Client()
+	outDir := filepath.Join(dir, "site")
+	thumbsDir := filepath.Join(outDir, "thumbs")
+
+	exit := runBuild(t, app,
+		"--out", outDir,
+		"--store", dbPath,
+		"--cache-thumbs",
+		"--thumbs-dir", thumbsDir,
+	)
+	if exit != 0 {
+		t.Fatalf("runBuild failed with exit %d, stderr:\n%s", exit, stderr.String())
+	}
+
+	if !strings.Contains(stdout.String(), "cached 1 thumbnail(s)") {
+		t.Errorf("stdout missing cached thumbnail notice:\n%s", stdout.String())
+	}
+
+	// Verify thumbnail was written to thumbsDir
+	files, err := os.ReadDir(thumbsDir)
+	if err != nil {
+		t.Fatalf("ReadDir thumbs: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file in thumbsDir, got %d", len(files))
+	}
+	if !strings.HasSuffix(files[0].Name(), ".png") {
+		t.Errorf("expected thumb to end with .png, got %s", files[0].Name())
+	}
+
+	// Verify rendered HTML points to /thumbs/<filename>
+	indexHTML := string(readFile(t, filepath.Join(outDir, "index.html")))
+	if !strings.Contains(indexHTML, "/thumbs/"+files[0].Name()) {
+		t.Errorf("index.html missing local thumb reference /thumbs/%s:\n%s", files[0].Name(), indexHTML)
+	}
+}
