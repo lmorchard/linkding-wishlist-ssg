@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lmorchard/linkding-wishlist-ssg/internal/asset"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/cluster"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/config"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/identity"
@@ -97,6 +98,8 @@ Front page and tag pages:
                                :* matches a prefix (default "wishlist,amazon,imported:*")
   --collapse-threshold int     fold same-store runs of at least this many items behind
                                <details>; 0 keeps every run expanded (default 0)
+  --cache-thumbs               download and cache remote thumbnails locally in <out>/thumbs/
+  --thumbs-dir string          local directory to store cached thumbnails (defaults to <out>/thumbs)
 
 Server flags (for "serve"):
   --dir string                 directory of static files to serve (default "./build")
@@ -118,6 +121,8 @@ Environment:
     --tag-page-threshold   ->  LINKDING_WISHLIST_TAG_PAGE_THRESHOLD
     --exclude-tags         ->  LINKDING_WISHLIST_EXCLUDE_TAGS
     --collapse-threshold   ->  LINKDING_WISHLIST_COLLAPSE_THRESHOLD
+    --cache-thumbs         ->  LINKDING_WISHLIST_CACHE_THUMBS
+    --thumbs-dir           ->  LINKDING_WISHLIST_THUMBS_DIR
     --out                  ->  LINKDING_WISHLIST_OUT
     --tag                  ->  LINKDING_WISHLIST_TAG
     --base-url             ->  LINKDING_WISHLIST_BASE_URL
@@ -164,6 +169,10 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 		"comma-separated tags omitted from the tag index; trailing :* matches a prefix")
 	fs.Int("collapse-threshold", 0,
 		"fold same-store runs of at least this many items behind <details>; 0 keeps every run expanded")
+	fs.Bool("cache-thumbs", false,
+		"download and cache remote thumbnails locally in <out>/thumbs/")
+	fs.String("thumbs-dir", "",
+		"local directory to store cached thumbnails (defaults to <out>/thumbs)")
 
 	if wantsHelp(args) {
 		fs.SetOutput(a.stdout)
@@ -212,6 +221,8 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 	tagThreshold := resolve.Int("tag-page-threshold")
 	excludedFlag := resolve.String("exclude-tags")
 	collapseThreshold := resolve.Int("collapse-threshold")
+	cacheThumbs := resolve.Bool("cache-thumbs")
+	thumbsDir := resolve.String("thumbs-dir")
 
 	if lintFormat != "text" && lintFormat != "json" {
 		fmt.Fprintf(a.stderr, "error: --lint-format must be \"text\" or \"json\", got %q\n", lintFormat)
@@ -324,10 +335,38 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 			priced, unavailable, storePath)
 	}
 
+	normalizedBase := normalizeBaseURL(baseURL)
+
+	// Cache remote thumbnails locally if configured.
+	// If thumbsDir is empty, default to <outDir>/thumbs.
+	var thumbMap asset.DownloadMap
+	targetThumbsDir := ""
+	if cacheThumbs || strings.TrimSpace(thumbsDir) != "" {
+		targetThumbsDir = thumbsDir
+		if strings.TrimSpace(targetThumbsDir) == "" {
+			targetThumbsDir = filepath.Join(outDir, "thumbs")
+		}
+		prefix := joinBase(baseURL, "/thumbs/")
+		var cached int
+		var errs []error
+		thumbMap, cached, errs = asset.PrepareThumbnails(ctx, items, asset.Options{
+			ThumbsDir:   targetThumbsDir,
+			URLPrefix:   prefix,
+			HTTPClient:  a.httpClient,
+			Concurrency: 5,
+		})
+		asset.ApplyThumbnails(items, thumbMap)
+		if cached > 0 {
+			fmt.Fprintf(a.stdout, "cached %d thumbnail(s) into %s\n", cached, targetThumbsDir)
+		}
+		for _, err := range errs {
+			fmt.Fprintf(a.stderr, "warning: %v\n", err)
+		}
+	}
+
 	dataset := cluster.Apply(items, rootTag)
 	findings := lint.Run(dataset.Items)
 
-	normalizedBase := normalizeBaseURL(baseURL)
 	files, err := render.Site(dataset, render.Options{
 		BaseURL: normalizedBase,
 		Tag:     rootTag,
@@ -349,6 +388,22 @@ func (a *application) runBuild(ctx context.Context, args []string) int {
 		return 1
 	}
 	files["manifest.json"] = manifestBuf.Bytes()
+
+	// If thumbs were cached into <outDir>/thumbs, copy them into the files map
+	// so writeFiles doesn't blow them away when recreating outDir.
+	if targetThumbsDir != "" {
+		if entries, rerr := os.ReadDir(targetThumbsDir); rerr == nil {
+			for _, e := range entries {
+				if e.IsDir() {
+					continue
+				}
+				data, rerr := os.ReadFile(filepath.Join(targetThumbsDir, e.Name()))
+				if rerr == nil {
+					files["thumbs/"+e.Name()] = data
+				}
+			}
+		}
+	}
 
 	if err := writeFiles(outDir, files); err != nil {
 		fmt.Fprintf(a.stderr, "error: writing output: %v\n", err)
@@ -385,6 +440,13 @@ func (a *application) envValue(fileValues map[string]string, key string) string 
 		}
 	}
 	return fileValues[key]
+}
+
+func joinBase(base, path string) string {
+	if base == "" {
+		base = "/"
+	}
+	return strings.TrimRight(base, "/") + path
 }
 
 func wantsHelp(args []string) bool {
