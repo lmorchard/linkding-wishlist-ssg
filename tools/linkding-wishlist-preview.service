@@ -1,0 +1,13 @@
+[Unit]
+Description=Linkding Wishlist Preview Web Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/lmorchard/docker/linkding-wishlist-ssg
+ExecStart=/home/lmorchard/docker/linkding-wishlist-ssg/linkding-wishlist-ssg serve --dir ./dist --addr 0.0.0.0:8878
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
