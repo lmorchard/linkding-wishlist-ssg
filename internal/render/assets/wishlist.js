@@ -19,13 +19,31 @@
   let query = '';
   let sortBy = 'default'; // 'default', 'price-asc', 'price-desc', 'title', 'store'
   let filterStock = 'all'; // 'all', 'instock', 'unavailable'
+  let selectedTag = ''; // Empty string means all tags
+
+  // Count top tags for facet chips
+  const tagCounts = {};
+  items.forEach(item => {
+    if (item.tags) {
+      item.tags.forEach(t => {
+        // Exclude root and provenance tags from facet bar
+        if (t === 'wishlist' || t === 'amazon' || t.startsWith('imported:')) return;
+        tagCounts[t] = (tagCounts[t] || 0) + 1;
+      });
+    }
+  });
+
+  const sortedTags = Object.keys(tagCounts)
+    .filter(t => tagCounts[t] >= 2) // At least 2 items
+    .sort((a, b) => tagCounts[b] - tagCounts[a])
+    .slice(0, 15); // Top 15 facets
 
   // Render controls toolbar
   const toolbar = document.createElement('div');
   toolbar.className = 'wishlist-toolbar';
   toolbar.innerHTML = `
     <div class="toolbar-search">
-      <input type="search" id="wishlist-search" placeholder="Search items, stores, tags..." aria-label="Search wishlist">
+      <input type="search" id="wishlist-search" placeholder="Search items, notes, stores, tags..." aria-label="Search wishlist">
     </div>
     <div class="toolbar-filters">
       <select id="wishlist-sort" aria-label="Sort by">
@@ -47,6 +65,18 @@
     </div>
   `;
 
+  // Render facet chips bar if tags exist
+  const facetBar = document.createElement('div');
+  facetBar.className = 'wishlist-facets-bar';
+  if (sortedTags.length > 0) {
+    let chips = `<button type="button" class="facet-chip ${selectedTag === '' ? 'active' : ''}" data-tag="">All</button>`;
+    chips += sortedTags.map(t => {
+      const display = t.startsWith('wishlist:') ? t.slice(9) : t;
+      return `<button type="button" class="facet-chip ${selectedTag === t ? 'active' : ''}" data-tag="${escapeHTML(t)}">${escapeHTML(display)} <span class="facet-chip-count">${tagCounts[t]}</span></button>`;
+    }).join('');
+    facetBar.innerHTML = chips;
+  }
+
   // Content container
   const content = document.createElement('div');
   content.className = 'wishlist-interactive-content';
@@ -54,6 +84,9 @@
   // Replace server-rendered view with interactive container
   container.innerHTML = '';
   container.appendChild(toolbar);
+  if (sortedTags.length > 0) {
+    container.appendChild(facetBar);
+  }
   container.appendChild(content);
 
   function escapeHTML(str) {
@@ -72,13 +105,15 @@
     let filtered = items.filter(item => {
       if (filterStock === 'instock' && item.unavailable) return false;
       if (filterStock === 'unavailable' && !item.unavailable) return false;
+      if (selectedTag && (!item.tags || !item.tags.includes(selectedTag))) return false;
       if (query) {
         const q = query.toLowerCase();
         const inTitle = item.title.toLowerCase().includes(q);
         const inStore = item.store.toLowerCase().includes(q);
         const inDesc = item.description ? item.description.toLowerCase().includes(q) : false;
+        const inNotes = item.user_notes ? item.user_notes.toLowerCase().includes(q) : false;
         const inTags = item.tags ? item.tags.some(t => t.toLowerCase().includes(q)) : false;
-        if (!inTitle && !inStore && !inDesc && !inTags) return false;
+        if (!inTitle && !inStore && !inDesc && !inNotes && !inTags) return false;
       }
       return true;
     });
@@ -124,6 +159,10 @@
         ? `<span class="badge badge-unavailable">Out of Stock</span>`
         : `<span class="badge badge-instock">Buyable</span>`;
 
+      const notes = item.user_notes
+        ? `<div class="table-item-notes"><span class="notes-icon">📝</span> ${escapeHTML(item.user_notes)}</div>`
+        : '';
+
       const desc = item.description 
         ? `<div class="table-item-desc">${escapeHTML(item.description)}</div>` 
         : '';
@@ -133,6 +172,7 @@
           <td class="col-thumb">${img}</td>
           <td class="col-title">
             <a class="item-title-link" href="${escapeHTML(item.url)}" target="_blank" rel="noopener">${escapeHTML(item.title)}</a>
+            ${notes}
             ${desc}
             <div class="table-mobile-meta">
               <a href="${escapeHTML(item.store_href)}">${escapeHTML(item.store)}</a> • ${price}
@@ -186,6 +226,10 @@
         ? `<span class="badge badge-unavailable">Out of Stock</span>`
         : '';
 
+      const notes = item.user_notes
+        ? `<p class="card-notes"><span class="notes-icon">📝</span> ${escapeHTML(item.user_notes)}</p>`
+        : '';
+
       const desc = item.description
         ? `<p class="grid-card-desc">${escapeHTML(item.description)}</p>`
         : '';
@@ -197,6 +241,7 @@
             <h3 class="card-title"><a href="${escapeHTML(item.url)}" target="_blank" rel="noopener">${escapeHTML(item.title)}</a></h3>
             <p class="card-store"><a href="${escapeHTML(item.store_href)}">${escapeHTML(item.store)}</a> ${status}</p>
             ${price}
+            ${notes}
             ${desc}
             ${tags}
           </div>
@@ -248,6 +293,31 @@
     btnGrid.classList.add('active');
     btnTable.classList.remove('active');
     render();
+  });
+
+  // Facet chip clicks
+  facetBar.addEventListener('click', e => {
+    const chip = e.target.closest('.facet-chip');
+    if (!chip) return;
+    selectedTag = chip.getAttribute('data-tag') || '';
+    facetBar.querySelectorAll('.facet-chip').forEach(c => {
+      c.classList.toggle('active', (c.getAttribute('data-tag') || '') === selectedTag);
+    });
+    render();
+  });
+
+  // Tag pill clicks in table or cards to quickly filter
+  content.addEventListener('click', e => {
+    const pill = e.target.closest('.tag-pill');
+    if (!pill) return;
+    const tag = pill.textContent.trim();
+    if (tag) {
+      selectedTag = (selectedTag === tag) ? '' : tag;
+      facetBar.querySelectorAll('.facet-chip').forEach(c => {
+        c.classList.toggle('active', (c.getAttribute('data-tag') || '') === selectedTag);
+      });
+      render();
+    }
   });
 
   // Initial render
