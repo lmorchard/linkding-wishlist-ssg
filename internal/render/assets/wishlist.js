@@ -19,6 +19,7 @@
   let query = '';
   let sortBy = 'default'; // 'default', 'price-asc', 'price-desc', 'title', 'store'
   let filterStock = 'all'; // 'all', 'instock', 'unavailable'
+  let filterPrice = 'all'; // 'all', 'u25', '25-50', '50-100', 'o100', 'unpriced'
   let selectedTag = ''; // Empty string means all tags
 
   // Count top tags for facet chips
@@ -54,9 +55,17 @@
         <option value="store">Store</option>
       </select>
       <select id="wishlist-stock" aria-label="Filter availability">
-        <option value="all">All Items</option>
+        <option value="all">All Statuses</option>
         <option value="instock">In Stock Only</option>
         <option value="unavailable">Unavailable Only</option>
+      </select>
+      <select id="wishlist-price" aria-label="Filter by price">
+        <option value="all">All Prices</option>
+        <option value="u25">Under $25</option>
+        <option value="25-50">$25 to $50</option>
+        <option value="50-100">$50 to $100</option>
+        <option value="o100">Over $100</option>
+        <option value="unpriced">Unpriced</option>
       </select>
       <div class="toolbar-view-toggle">
         <button type="button" id="toggle-table" class="${currentView === 'table' ? 'active' : ''}" title="Table View">☷ Table</button>
@@ -105,6 +114,25 @@
     let filtered = items.filter(item => {
       if (filterStock === 'instock' && item.unavailable) return false;
       if (filterStock === 'unavailable' && !item.unavailable) return false;
+
+      // Price bucket filter
+      if (filterPrice !== 'all') {
+        const p = item.price;
+        if (filterPrice === 'unpriced') {
+          if (p != null) return false;
+        } else if (p == null) {
+          return false;
+        } else if (filterPrice === 'u25' && p >= 25) {
+          return false;
+        } else if (filterPrice === '25-50' && (p < 25 || p >= 50)) {
+          return false;
+        } else if (filterPrice === '50-100' && (p < 50 || p >= 100)) {
+          return false;
+        } else if (filterPrice === 'o100' && p < 100) {
+          return false;
+        }
+      }
+
       if (selectedTag && (!item.tags || !item.tags.includes(selectedTag))) return false;
       if (query) {
         const q = query.toLowerCase();
@@ -281,6 +309,12 @@
   const stockSelect = toolbar.querySelector('#wishlist-stock');
   stockSelect.addEventListener('change', e => {
     filterStock = e.target.value;
+    render();
+  });
+
+  const priceSelect = toolbar.querySelector('#wishlist-price');
+  priceSelect.addEventListener('change', e => {
+    filterPrice = e.target.value;
     render();
   });
 
