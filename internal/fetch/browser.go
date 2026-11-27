@@ -216,7 +216,12 @@ func (b *BrowserClient) FetchAmazon(ctx context.Context, targetURL string) (extr
 			}
 			if json.Unmarshal(evalRes, &evalOut) == nil {
 				raw = evalOut.Result.Value
-				if raw.Offscreen != "" || raw.Whole != "" || raw.AvailText != "" || raw.IsDogPage || raw.IsCaptcha {
+				if raw.IsDogPage || raw.IsCaptcha {
+					break
+				}
+				hasPriceOrStock := raw.Offscreen != "" || raw.Whole != "" || raw.AvailText != ""
+				// Break once we have price/stock AND image, or if price/stock settled and we've polled for at least 3 seconds
+				if hasPriceOrStock && raw.ImageURL != "" {
 					break
 				}
 			}
