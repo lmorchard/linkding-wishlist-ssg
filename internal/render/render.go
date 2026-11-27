@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/model"
+	"github.com/lmorchard/linkding-wishlist-ssg/internal/pages"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/siteconfig"
 )
 
@@ -22,10 +23,11 @@ var assetsFS embed.FS
 
 // Options configures site rendering.
 type Options struct {
-	BaseURL string
-	Tag     string
-	Config  siteconfig.Config
-	Now     time.Time
+	BaseURL     string
+	Tag         string
+	Config      siteconfig.Config
+	Now         time.Time
+	CustomPages []pages.CustomPage
 }
 
 // Site renders every page and returns files keyed by slash-separated relative
@@ -62,6 +64,30 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 	base := opts.BaseURL
 	archives := buildArchives(dataset.Items)
 
+	siteTitle := opts.Config.SiteTitle
+	if siteTitle == "" {
+		siteTitle = siteconfig.DefaultSiteTitle
+	}
+
+	// Build header links from custom markdown pages and arbitrary config links
+	headerLinks := make([]linkView, 0, len(opts.CustomPages)+len(opts.Config.HeaderLinks))
+	for _, cp := range opts.CustomPages {
+		headerLinks = append(headerLinks, linkView{
+			Label: cp.Title,
+			Href:  joinBase(base, cp.Path),
+		})
+	}
+	for _, hl := range opts.Config.HeaderLinks {
+		href := hl.URL
+		if strings.HasPrefix(href, "/") {
+			href = joinBase(base, href)
+		}
+		headerLinks = append(headerLinks, linkView{
+			Label: hl.Label,
+			Href:  href,
+		})
+	}
+
 	pinned, stream := splitPinned(dataset.Items, opts.Config.PinnedTag)
 	// Unavailable items are held out of the front-page stream so the main view
 	// stays a live list. They still appear on store, tag, and archive pages,
@@ -70,18 +96,20 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 	stream = withinWindow(stream, opts.Config.WindowStart(opts.Now))
 
 	view := pageView{
-		Title:      "Wishlist",
-		Heading:    "Wishlist",
-		CSSHref:    joinBase(base, "/assets/style.css"),
-		JSHref:     joinBase(base, "/assets/wishlist.js"),
-		HomeHref:   joinBase(base, "/"),
-		StoresHref: joinBase(base, "/stores/"),
-		Tag:        opts.Tag,
-		PinnedDays: buildDays(pinned, storePaths, base, opts.Config.CollapseThreshold),
-		Days:       buildDays(stream, storePaths, base, opts.Config.CollapseThreshold),
-		PinnedTag:  opts.Config.PinnedTag,
-		TagsHref:   joinBase(base, "/tags/"),
-		ItemsJSON:  buildItemsJSON(append(pinned, stream...), storePaths, base),
+		Title:       siteTitle,
+		SiteTitle:   siteTitle,
+		Heading:     siteTitle,
+		CSSHref:     joinBase(base, "/assets/style.css"),
+		JSHref:      joinBase(base, "/assets/wishlist.js"),
+		HomeHref:    joinBase(base, "/"),
+		StoresHref:  joinBase(base, "/stores/"),
+		Tag:         opts.Tag,
+		HeaderLinks: headerLinks,
+		PinnedDays:  buildDays(pinned, storePaths, base, opts.Config.CollapseThreshold),
+		Days:        buildDays(stream, storePaths, base, opts.Config.CollapseThreshold),
+		PinnedTag:   opts.Config.PinnedTag,
+		TagsHref:    joinBase(base, "/tags/"),
+		ItemsJSON:   buildItemsJSON(append(pinned, stream...), storePaths, base),
 	}
 	for _, facet := range dataset.Facets {
 		view.Facets = append(view.Facets, facetLinkView{
@@ -107,11 +135,13 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 
 	for _, store := range dataset.Stores {
 		storeView := pageView{
-			Title:    store.Label + " — Wishlist",
-			Heading:  store.Label,
-			CSSHref:  joinBase(base, "/assets/style.css"),
-			HomeHref: joinBase(base, "/"),
-			Tag:      opts.Tag,
+			Title:       store.Label + " — " + siteTitle,
+			SiteTitle:   siteTitle,
+			Heading:     store.Label,
+			CSSHref:     joinBase(base, "/assets/style.css"),
+			HomeHref:    joinBase(base, "/"),
+			Tag:         opts.Tag,
+			HeaderLinks: headerLinks,
 		}
 		for _, id := range store.ItemIDs {
 			item, ok := itemsByID[id]
@@ -137,11 +167,13 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 
 	for _, facet := range dataset.Facets {
 		facetView := pageView{
-			Title:    "Facet: " + facet.Name + " — Wishlist",
-			Heading:  "Facet: " + facet.Name,
-			CSSHref:  joinBase(base, "/assets/style.css"),
-			HomeHref: joinBase(base, "/"),
-			Tag:      opts.Tag,
+			Title:       "Facet: " + facet.Name + " — " + siteTitle,
+			SiteTitle:   siteTitle,
+			Heading:     "Facet: " + facet.Name,
+			CSSHref:     joinBase(base, "/assets/style.css"),
+			HomeHref:    joinBase(base, "/"),
+			Tag:         opts.Tag,
+			HeaderLinks: headerLinks,
 		}
 		for _, id := range facet.ItemIDs {
 			item, ok := itemsByID[id]
@@ -166,12 +198,14 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 	}
 
 	storesView := pageView{
-		Title:    "Stores — Wishlist",
-		Heading:  "Stores",
-		CSSHref:  joinBase(base, "/assets/style.css"),
-		HomeHref: joinBase(base, "/"),
-		Tag:      opts.Tag,
-		Stores:   buildStoreLinks(dataset.Stores, base),
+		Title:       "Stores — " + siteTitle,
+		SiteTitle:   siteTitle,
+		Heading:     "Stores",
+		CSSHref:     joinBase(base, "/assets/style.css"),
+		HomeHref:    joinBase(base, "/"),
+		Tag:         opts.Tag,
+		HeaderLinks: headerLinks,
+		Stores:      buildStoreLinks(dataset.Stores, base),
 	}
 	storesHTML, err := execute(tmpl, "stores", storesView)
 	if err != nil {
@@ -183,13 +217,15 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 	// to browse everything matching it, so hiding old items would defeat it.
 	tags := buildTags(dataset.Items, opts.Config)
 	tagsIndexView := pageView{
-		Title:      "Tags — Wishlist",
-		Heading:    "Tags",
-		CSSHref:    joinBase(base, "/assets/style.css"),
-		HomeHref:   joinBase(base, "/"),
-		StoresHref: joinBase(base, "/stores/"),
-		Tag:        opts.Tag,
-		TagsHref:   joinBase(base, "/tags/"),
+		Title:       "Tags — " + siteTitle,
+		SiteTitle:   siteTitle,
+		Heading:     "Tags",
+		CSSHref:     joinBase(base, "/assets/style.css"),
+		HomeHref:    joinBase(base, "/"),
+		StoresHref:  joinBase(base, "/stores/"),
+		Tag:         opts.Tag,
+		TagsHref:    joinBase(base, "/tags/"),
+		HeaderLinks: headerLinks,
 	}
 	for _, collection := range tags {
 		tagsIndexView.Tags = append(tagsIndexView.Tags, tagLinkView{
@@ -207,15 +243,17 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 
 	for _, collection := range tags {
 		tagView := pageView{
-			Title:     collection.Name + " — Wishlist",
-			Heading:   collection.Name,
-			CSSHref:   joinBase(base, "/assets/style.css"),
-			JSHref:    joinBase(base, "/assets/wishlist.js"),
-			HomeHref:  joinBase(base, "/"),
-			Tag:       opts.Tag,
-			TagsHref:  joinBase(base, "/tags/"),
-			Days:      buildDays(collection.Items, storePaths, base, opts.Config.CollapseThreshold),
-			ItemsJSON: buildItemsJSON(collection.Items, storePaths, base),
+			Title:       collection.Name + " — " + siteTitle,
+			SiteTitle:   siteTitle,
+			Heading:     collection.Name,
+			CSSHref:     joinBase(base, "/assets/style.css"),
+			JSHref:      joinBase(base, "/assets/wishlist.js"),
+			HomeHref:    joinBase(base, "/"),
+			Tag:         opts.Tag,
+			TagsHref:    joinBase(base, "/tags/"),
+			HeaderLinks: headerLinks,
+			Days:        buildDays(collection.Items, storePaths, base, opts.Config.CollapseThreshold),
+			ItemsJSON:   buildItemsJSON(collection.Items, storePaths, base),
 		}
 		page, err := execute(tmpl, "tag", tagView)
 		if err != nil {
@@ -226,12 +264,14 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 
 	for _, year := range archives {
 		yearView := pageView{
-			Title:    fmt.Sprintf("%d — Wishlist", year.Year),
-			Heading:  strconv.Itoa(year.Year),
-			CSSHref:  joinBase(base, "/assets/style.css"),
-			JSHref:   joinBase(base, "/assets/wishlist.js"),
-			HomeHref: joinBase(base, "/"),
-			Tag:      opts.Tag,
+			Title:       fmt.Sprintf("%d — %s", year.Year, siteTitle),
+			SiteTitle:   siteTitle,
+			Heading:     strconv.Itoa(year.Year),
+			CSSHref:     joinBase(base, "/assets/style.css"),
+			JSHref:      joinBase(base, "/assets/wishlist.js"),
+			HomeHref:    joinBase(base, "/"),
+			Tag:         opts.Tag,
+			HeaderLinks: headerLinks,
 		}
 		yearItems := make([]model.Item, 0)
 		for _, month := range year.Months {
@@ -253,16 +293,18 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 
 		for _, month := range year.Months {
 			monthView := pageView{
-				Title:     monthLabel(month.Year, month.Month) + " — Wishlist",
-				Heading:   monthLabel(month.Year, month.Month),
-				CSSHref:   joinBase(base, "/assets/style.css"),
-				JSHref:    joinBase(base, "/assets/wishlist.js"),
-				HomeHref:  joinBase(base, "/"),
-				Tag:       opts.Tag,
-				YearHref:  joinBase(base, archiveYearPath(year.Year)),
-				YearLabel: strconv.Itoa(year.Year),
-				Days:      buildDays(month.Items, storePaths, base, opts.Config.CollapseThreshold),
-				ItemsJSON: buildItemsJSON(month.Items, storePaths, base),
+				Title:       fmt.Sprintf("%s — %s", monthLabel(month.Year, month.Month), siteTitle),
+				SiteTitle:   siteTitle,
+				Heading:     monthLabel(month.Year, month.Month),
+				CSSHref:     joinBase(base, "/assets/style.css"),
+				JSHref:      joinBase(base, "/assets/wishlist.js"),
+				HomeHref:    joinBase(base, "/"),
+				Tag:         opts.Tag,
+				YearHref:    joinBase(base, archiveYearPath(year.Year)),
+				YearLabel:   strconv.Itoa(year.Year),
+				HeaderLinks: headerLinks,
+				Days:        buildDays(month.Items, storePaths, base, opts.Config.CollapseThreshold),
+				ItemsJSON:   buildItemsJSON(month.Items, storePaths, base),
 			}
 			monthPath := archiveMonthPath(month.Year, month.Month)
 			monthHTML, err := execute(tmpl, "archive", monthView)
@@ -273,16 +315,38 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 		}
 	}
 
+	// Render custom markdown pages (e.g. /colophon/, /about/)
+	for _, cp := range opts.CustomPages {
+		customView := pageView{
+			Title:       cp.Title + " — " + siteTitle,
+			SiteTitle:   siteTitle,
+			Heading:     cp.Title,
+			CSSHref:     joinBase(base, "/assets/style.css"),
+			HomeHref:    joinBase(base, "/"),
+			Tag:         opts.Tag,
+			HeaderLinks: headerLinks,
+			ContentHTML: cp.ContentHTML,
+		}
+		pageHTML, err := execute(tmpl, "page", customView)
+		if err != nil {
+			return nil, fmt.Errorf("rendering custom page %s: %w", cp.Slug, err)
+		}
+		files[fileForPath(cp.Path, cp.Path)] = pageHTML
+	}
+
 	return files, nil
 }
 
 type pageView struct {
-	Title    string
-	Heading  string
-	CSSHref  string
-	HomeHref string
-	Tag      string
-	JSHref   string
+	Title       string
+	SiteTitle   string
+	Heading     string
+	CSSHref     string
+	HomeHref    string
+	Tag         string
+	JSHref      string
+	HeaderLinks []linkView
+	ContentHTML template.HTML
 
 	PinnedDays []dayView
 	PinnedTag  string
@@ -434,6 +498,9 @@ func execute(tmpl *template.Template, name string, view pageView) ([]byte, error
 func joinBase(base, path string) string {
 	if base == "" {
 		base = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
 	}
 	return strings.TrimRight(base, "/") + path
 }

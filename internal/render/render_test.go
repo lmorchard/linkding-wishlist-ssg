@@ -2,6 +2,7 @@ package render
 
 import (
 	"encoding/json"
+	"html/template"
 	"regexp"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/cluster"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/model"
+	"github.com/lmorchard/linkding-wishlist-ssg/internal/pages"
 	"github.com/lmorchard/linkding-wishlist-ssg/internal/siteconfig"
 )
 
@@ -435,5 +437,59 @@ func TestBuildItemsJSONFormat(t *testing.T) {
 	}
 	if it.Unavailable {
 		t.Error("expected Unavailable = false")
+	}
+}
+
+func TestCustomPagesAndHeaderLinks(t *testing.T) {
+	customPages := []pages.CustomPage{
+		{
+			Slug:        "colophon",
+			Title:       "Colophon",
+			Path:        "colophon/",
+			ContentHTML: template.HTML("<p>Built with Go.</p>"),
+		},
+	}
+	cfg := siteconfig.Default()
+	cfg.SiteTitle = "Les's Wants"
+	cfg.HeaderLinks = []siteconfig.HeaderLink{
+		{
+			Label: "About Me",
+			URL:   "https://example.com/about",
+		},
+	}
+
+	files, err := Site(testDataset(), Options{
+		BaseURL:     "/",
+		Tag:         "wishlist",
+		Config:      cfg,
+		CustomPages: customPages,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Check index.html header title and nav links
+	index := string(files["index.html"])
+	if !strings.Contains(index, "Les&#39;s Wants") && !strings.Contains(index, "Les's Wants") {
+		t.Fatalf("index missing custom site title:\n%s", index)
+	}
+	if !strings.Contains(index, `<a href="/colophon/">Colophon</a>`) {
+		t.Fatalf("index missing link to /colophon/:\n%s", index)
+	}
+	if !strings.Contains(index, `<a href="https://example.com/about">About Me</a>`) {
+		t.Fatalf("index missing external header link:\n%s", index)
+	}
+
+	// 2. Check rendered custom page
+	colophon, ok := files["colophon/index.html"]
+	if !ok {
+		t.Fatal("colophon/index.html was not generated")
+	}
+	colophonStr := string(colophon)
+	if !strings.Contains(colophonStr, "<p>Built with Go.</p>") {
+		t.Fatalf("colophon page missing content:\n%s", colophonStr)
+	}
+	if !strings.Contains(colophonStr, "Colophon — Les&#39;s Wants") && !strings.Contains(colophonStr, "Colophon — Les's Wants") {
+		t.Fatalf("colophon page missing page title:\n%s", colophonStr)
 	}
 }
