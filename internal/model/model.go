@@ -91,6 +91,22 @@ func FromBookmark(b linkding.Bookmark, overrides Overrides) Item {
 		tags = []string{}
 	}
 
+	// Priority tags: wishlist:p0 through wishlist:p5
+	// Explicit Tier 2 overrides (from notes) take precedence.
+	if overrides.Priority == nil {
+		for _, t := range tags {
+			lower := strings.ToLower(strings.TrimSpace(t))
+			if strings.HasPrefix(lower, "wishlist:p") && len(lower) == 11 {
+				digit := lower[10]
+				if digit >= '0' && digit <= '5' {
+					p := int(digit - '0')
+					overrides.Priority = &p
+					break
+				}
+			}
+		}
+	}
+
 	return Item{
 		ID:          identity.ItemID(b.URL),
 		URL:         b.URL,

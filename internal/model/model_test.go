@@ -2,6 +2,8 @@ package model
 
 import (
 	"testing"
+
+	"github.com/lmorchard/linkding-wishlist-ssg/internal/linkding"
 )
 
 func TestItemUserNotes(t *testing.T) {
@@ -45,4 +47,74 @@ func TestItemUserNotes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPriorityTagExtraction(t *testing.T) {
+	tests := []struct {
+		name          string
+		tags          []string
+		notesPriority *int
+		wantPriority  *int
+	}{
+		{
+			name:         "p0 tag",
+			tags:         []string{"wishlist", "wishlist:p0"},
+			wantPriority: ptrInt(0),
+		},
+		{
+			name:         "p1 tag case insensitive",
+			tags:         []string{"wishlist", "Wishlist:P1"},
+			wantPriority: ptrInt(1),
+		},
+		{
+			name:         "p5 tag",
+			tags:         []string{"wishlist", "wishlist:p5"},
+			wantPriority: ptrInt(5),
+		},
+		{
+			name:         "p6 tag ignored",
+			tags:         []string{"wishlist", "wishlist:p6"},
+			wantPriority: nil,
+		},
+		{
+			name:         "no priority tag",
+			tags:         []string{"wishlist", "books"},
+			wantPriority: nil,
+		},
+		{
+			name:          "tier 2 override wins over tag",
+			tags:          []string{"wishlist", "wishlist:p2"},
+			notesPriority: ptrInt(0),
+			wantPriority:  ptrInt(0),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := linkding.Bookmark{
+				URL:      "https://example.com/item",
+				TagNames: tt.tags,
+			}
+			overrides := Overrides{
+				Priority: tt.notesPriority,
+			}
+			it := FromBookmark(b, overrides)
+			if tt.wantPriority == nil {
+				if it.Overrides.Priority != nil {
+					t.Errorf("expected Priority=nil, got %v", *it.Overrides.Priority)
+				}
+			} else {
+				if it.Overrides.Priority == nil {
+					t.Fatalf("expected Priority=%d, got nil", *tt.wantPriority)
+				}
+				if *it.Overrides.Priority != *tt.wantPriority {
+					t.Errorf("Priority = %d, want %d", *it.Overrides.Priority, *tt.wantPriority)
+				}
+			}
+		})
+	}
+}
+
+func ptrInt(v int) *int {
+	return &v
 }
