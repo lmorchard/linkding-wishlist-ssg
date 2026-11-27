@@ -339,11 +339,6 @@ func TestSiteRendersArchivePages(t *testing.T) {
 	if !strings.Contains(year, `href="/archive/2026/11/"`) {
 		t.Fatalf("year archive missing month link:\n%s", year)
 	}
-
-	index := string(files["index.html"])
-	if !strings.Contains(index, `href="/archive/2026/"`) || !strings.Contains(index, `href="/archive/2025/"`) {
-		t.Fatalf("index missing archive links:\n%s", index)
-	}
 }
 
 func TestSiteEmitsNoInlineEventHandlers(t *testing.T) {

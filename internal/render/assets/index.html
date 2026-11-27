@@ -6,13 +6,7 @@
 {{range .Facets}}<li><a href="{{.Href}}">{{.Name}}</a></li>
 {{end}}</ul>
 </nav>
-{{end}}<nav class="views">
-<a href="{{.StoresHref}}">All stores</a>
-<a href="/tags/">All tags</a>
-{{if .Years}}<span class="views-label">Archive</span>
-{{range .Years}}<a href="{{.Href}}">{{.Label}}</a>
-{{end}}{{end}}</nav>
-<div id="wishlist-app">
+{{end}}<div id="wishlist-app">
 {{if .PinnedDays}}<section class="pinned">
 <h2 class="pinned-heading">Pinned</h2>
 {{template "daylist" .PinnedDays}}

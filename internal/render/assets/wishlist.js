@@ -21,7 +21,20 @@
   let filterStock = 'all'; // 'all', 'instock', 'unavailable'
   let filterPrice = 'all'; // 'all', 'u25', '25-50', '50-100', 'o100', 'unpriced'
   let filterPriority = 'all'; // 'all', 'top', 'p0', 'p1', 'p2', 'p3', 'p4', 'p5'
+  let filterYear = 'all'; // 'all', or specific year string like '2026', '2025'
   let selectedTag = ''; // Empty string means all tags
+  let currentPage = 1;
+  const pageSize = 50;
+
+  // Extract available years sorted descending
+  const yearsSet = new Set();
+  items.forEach(item => {
+    if (item.added_at) {
+      const yr = new Date(item.added_at).getFullYear();
+      if (!isNaN(yr)) yearsSet.add(yr);
+    }
+  });
+  const sortedYears = Array.from(yearsSet).sort((a, b) => b - a);
 
   // Count top tags for facet chips
   const tagCounts = {};
@@ -77,6 +90,10 @@
         <option value="50-100">$50 to $100</option>
         <option value="o100">Over $100</option>
         <option value="unpriced">Unpriced</option>
+      </select>
+      <select id="wishlist-year" aria-label="Filter by year">
+        <option value="all">All Years</option>
+        ${sortedYears.map(yr => `<option value="${yr}">${yr}</option>`).join('')}
       </select>
       <div class="toolbar-view-toggle">
         <button type="button" id="toggle-table" class="${currentView === 'table' ? 'active' : ''}" title="Table View">☷ Table</button>
@@ -140,6 +157,13 @@
         }
       }
 
+      // Year filter
+      if (filterYear !== 'all') {
+        if (!item.added_at) return false;
+        const itemYear = new Date(item.added_at).getFullYear().toString();
+        if (itemYear !== filterYear) return false;
+      }
+
       // Price bucket filter
       if (filterPrice !== 'all') {
         const p = item.price;
@@ -199,10 +223,19 @@
       return;
     }
 
+    // 3. Paginate
+    const totalItems = filtered.length;
+    const totalPages = Math.ceil(totalItems / pageSize);
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+
+    const startIndex = (currentPage - 1) * pageSize;
+    const pagedItems = filtered.slice(startIndex, startIndex + pageSize);
+
     if (currentView === 'table') {
-      renderTable(filtered);
+      renderTable(pagedItems, totalItems, totalPages);
     } else {
-      renderGrid(filtered);
+      renderGrid(pagedItems, totalItems, totalPages);
     }
   }
 
@@ -212,7 +245,27 @@
     return clean ? clean[0].toUpperCase() : '•';
   }
 
-  function renderTable(list) {
+  function renderPagination(totalItems, totalPages) {
+    if (totalPages <= 1) {
+      return `<p class="table-count-summary">Showing all ${totalItems} item${totalItems === 1 ? '' : 's'}</p>`;
+    }
+
+    const start = (currentPage - 1) * pageSize + 1;
+    const end = Math.min(currentPage * pageSize, totalItems);
+
+    return `
+      <div class="wishlist-pagination">
+        <div class="pagination-info">Showing ${start}–${end} of ${totalItems} items</div>
+        <div class="pagination-controls">
+          <button type="button" class="btn-page" id="page-prev" ${currentPage <= 1 ? 'disabled' : ''}>← Previous</button>
+          <span class="page-current">Page ${currentPage} of ${totalPages}</span>
+          <button type="button" class="btn-page" id="page-next" ${currentPage >= totalPages ? 'disabled' : ''}>Next →</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderTable(list, totalItems, totalPages) {
     let rows = list.map(item => {
       const initial = storeInitial(item.store);
       const img = item.image_url 
@@ -281,11 +334,12 @@
           </tbody>
         </table>
       </div>
-      <p class="table-count-summary">Showing ${list.length} item${list.length === 1 ? '' : 's'}</p>
+      ${renderPagination(totalItems, totalPages)}
     `;
+    attachPaginationEvents();
   }
 
-  function renderGrid(list) {
+  function renderGrid(list, totalItems, totalPages) {
     let cards = list.map(item => {
       const initial = storeInitial(item.store);
       const img = item.image_url
@@ -335,38 +389,72 @@
       <div class="cards grid-cards">
         ${cards}
       </div>
-      <p class="table-count-summary">Showing ${list.length} item${list.length === 1 ? '' : 's'}</p>
+      ${renderPagination(totalItems, totalPages)}
     `;
+    attachPaginationEvents();
+  }
+
+  function attachPaginationEvents() {
+    const prevBtn = content.querySelector('#page-prev');
+    const nextBtn = content.querySelector('#page-next');
+    if (prevBtn) {
+      prevBtn.addEventListener('click', () => {
+        if (currentPage > 1) {
+          currentPage--;
+          render();
+          content.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    }
+    if (nextBtn) {
+      nextBtn.addEventListener('click', () => {
+        currentPage++;
+        render();
+        content.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
   }
 
   // Event handlers
   const searchInput = toolbar.querySelector('#wishlist-search');
   searchInput.addEventListener('input', e => {
     query = e.target.value.trim();
+    currentPage = 1;
     render();
   });
 
   const sortSelect = toolbar.querySelector('#wishlist-sort');
   sortSelect.addEventListener('change', e => {
     sortBy = e.target.value;
+    currentPage = 1;
     render();
   });
 
   const stockSelect = toolbar.querySelector('#wishlist-stock');
   stockSelect.addEventListener('change', e => {
     filterStock = e.target.value;
+    currentPage = 1;
     render();
   });
 
   const prioritySelect = toolbar.querySelector('#wishlist-priority');
   prioritySelect.addEventListener('change', e => {
     filterPriority = e.target.value;
+    currentPage = 1;
     render();
   });
 
   const priceSelect = toolbar.querySelector('#wishlist-price');
   priceSelect.addEventListener('change', e => {
     filterPrice = e.target.value;
+    currentPage = 1;
+    render();
+  });
+
+  const yearSelect = toolbar.querySelector('#wishlist-year');
+  yearSelect.addEventListener('change', e => {
+    filterYear = e.target.value;
+    currentPage = 1;
     render();
   });
 
@@ -394,6 +482,7 @@
     const chip = e.target.closest('.facet-chip');
     if (!chip) return;
     selectedTag = chip.getAttribute('data-tag') || '';
+    currentPage = 1;
     facetBar.querySelectorAll('.facet-chip').forEach(c => {
       c.classList.toggle('active', (c.getAttribute('data-tag') || '') === selectedTag);
     });
@@ -407,6 +496,7 @@
     const tag = pill.textContent.trim();
     if (tag) {
       selectedTag = (selectedTag === tag) ? '' : tag;
+      currentPage = 1;
       facetBar.querySelectorAll('.facet-chip').forEach(c => {
         c.classList.toggle('active', (c.getAttribute('data-tag') || '') === selectedTag);
       });

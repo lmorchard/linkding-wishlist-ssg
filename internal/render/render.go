@@ -96,6 +96,9 @@ func Site(dataset model.Dataset, opts Options) (map[string][]byte, error) {
 		})
 	}
 
+	// On index.html, feed ALL items into ItemsJSON so client-side explorer has full access
+	view.ItemsJSON = buildItemsJSON(dataset.Items, storePaths, base)
+
 	indexHTML, err := execute(tmpl, "index", view)
 	if err != nil {
 		return nil, err
