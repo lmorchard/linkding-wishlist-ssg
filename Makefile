@@ -44,6 +44,7 @@ deploy-bin: build-linux
 	scp $(BIN)-linux-amd64 $(DEPLOY_HOST):$(DEPLOY_DIR)/$(BIN).new
 	ssh $(DEPLOY_HOST) "mv $(DEPLOY_DIR)/$(BIN).new $(DEPLOY_DIR)/$(BIN) && chmod +x $(DEPLOY_DIR)/$(BIN) && systemctl --user restart linkding-wishlist-preview.service"
 	rm -f $(BIN)-linux-amd64
+	rsync -avz ./data/ $(DEPLOY_HOST):$(DEPLOY_DIR)/data/
 
 deploy-site:
 	ssh $(DEPLOY_HOST) "cd $(DEPLOY_DIR) && ./$(BIN) build --store ./wishlist.db --cache-thumbs --out ./dist"
