@@ -106,6 +106,38 @@ func FromBookmark(b linkding.Bookmark, overrides Overrides) Item {
 	}
 }
 
+// UserNotes returns the human personal notes portion with any fenced
+// ```wishlist ... ``` block stripped out and excess blank lines collapsed.
+func (i Item) UserNotes() string {
+	raw := strings.TrimSpace(i.Notes)
+	if raw == "" {
+		return ""
+	}
+	lines := strings.Split(raw, "\n")
+	var kept []string
+	inFence := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !inFence && (strings.HasPrefix(trimmed, "```wishlist") || strings.HasPrefix(trimmed, "~~~wishlist")) {
+			inFence = true
+			continue
+		}
+		if inFence && (strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~")) {
+			inFence = false
+			continue
+		}
+		if !inFence {
+			kept = append(kept, line)
+		}
+	}
+	joined := strings.TrimSpace(strings.Join(kept, "\n"))
+	// Collapse runs of 3+ newlines down to 2
+	for strings.Contains(joined, "\n\n\n") {
+		joined = strings.ReplaceAll(joined, "\n\n\n", "\n\n")
+	}
+	return joined
+}
+
 // DisplayTitle returns the card title: the bookmark title when present,
 // otherwise a readable form of the URL path, then the hostname, then the URL.
 func (i Item) DisplayTitle() string {

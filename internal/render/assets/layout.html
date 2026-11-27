@@ -21,6 +21,7 @@
 <p class="card-store"><a href="{{.StoreHref}}">{{.StoreLabel}}</a></p>
 {{if .Variant}}<p class="card-variant">{{.Variant}}</p>
 {{end}}{{if .Price}}<p class="card-price">{{.Price}}</p>
+{{end}}{{if .UserNotes}}<p class="card-notes">{{.UserNotes}}</p>
 {{end}}{{if .Description}}<p class="card-desc">{{.Description}}</p>
 {{end}}{{if .Archived}}<p class="card-archived">archived</p>
 {{end}}</div></article>{{end}}

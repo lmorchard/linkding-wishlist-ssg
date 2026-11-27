@@ -395,6 +395,7 @@ func TestBuildItemsJSONFormat(t *testing.T) {
 			StoreKey:    "example.com",
 			StoreLabel:  "Example Store",
 			Description: "A great widget for testing",
+			Notes:       "Special human note about color.\n\n```wishlist\nprice: 19.99\n```",
 			ImageURL:    "https://example.com/thumb.jpg",
 			Tags:        []string{"wishlist", "gadgets"},
 			Unavailable: false,
@@ -430,6 +431,9 @@ func TestBuildItemsJSONFormat(t *testing.T) {
 	}
 	if it.Description != "A great widget for testing" {
 		t.Errorf("description = %q, want 'A great widget for testing'", it.Description)
+	}
+	if it.UserNotes != "Special human note about color." {
+		t.Errorf("user_notes = %q, want 'Special human note about color.'", it.UserNotes)
 	}
 	if len(it.Tags) != 2 || it.Tags[1] != "gadgets" {
 		t.Errorf("tags = %v, want ['wishlist', 'gadgets']", it.Tags)
