@@ -17,9 +17,10 @@
   // State
   let currentView = localStorage.getItem('wishlist_view') || 'table'; // 'table' or 'grid'
   let query = '';
-  let sortBy = 'default'; // 'default', 'price-asc', 'price-desc', 'title', 'store'
+  let sortBy = 'default'; // 'default', 'price-asc', 'price-desc', 'title', 'store', 'added-asc', 'added-desc'
   let filterStock = 'all'; // 'all', 'instock', 'unavailable'
   let filterPrice = 'all'; // 'all', 'u25', '25-50', '50-100', 'o100', 'unpriced'
+  let filterPriority = 'all'; // 'all', 'top', 'p0', 'p1', 'p2', 'p3', 'p4', 'p5'
   let selectedTag = ''; // Empty string means all tags
 
   // Count top tags for facet chips
@@ -27,8 +28,9 @@
   items.forEach(item => {
     if (item.tags) {
       item.tags.forEach(t => {
-        // Exclude root and provenance tags from facet bar
-        if (t === 'wishlist' || t === 'amazon' || t.startsWith('imported:')) return;
+        const lower = t.toLowerCase();
+        // Exclude root selector, provenance tags, and priority tags from topic chips
+        if (lower === 'wishlist' || lower === 'amazon' || lower.startsWith('imported:') || /^wishlist:p[0-5]$/.test(lower)) return;
         tagCounts[t] = (tagCounts[t] || 0) + 1;
       });
     }
@@ -48,11 +50,20 @@
     </div>
     <div class="toolbar-filters">
       <select id="wishlist-sort" aria-label="Sort by">
-        <option value="default">Sort: Default</option>
+        <option value="default">Sort: Priority &amp; Newest</option>
+        <option value="added-desc">Date Added: Newest First</option>
+        <option value="added-asc">Date Added: Oldest First</option>
         <option value="price-asc">Price: Low to High</option>
         <option value="price-desc">Price: High to Low</option>
         <option value="title">Title: A to Z</option>
         <option value="store">Store</option>
+      </select>
+      <select id="wishlist-priority" aria-label="Filter priority">
+        <option value="all">All Priorities</option>
+        <option value="top">Top Wants (P0–P1)</option>
+        <option value="p0">P0 Only</option>
+        <option value="p1">P1 Only</option>
+        <option value="p2">P2 Only</option>
       </select>
       <select id="wishlist-stock" aria-label="Filter availability">
         <option value="all">All Statuses</option>
@@ -115,6 +126,20 @@
       if (filterStock === 'instock' && item.unavailable) return false;
       if (filterStock === 'unavailable' && !item.unavailable) return false;
 
+      // Priority filter
+      if (filterPriority !== 'all') {
+        const p = item.priority;
+        if (filterPriority === 'top') {
+          if (p !== 0 && p !== 1) return false;
+        } else if (filterPriority === 'p0') {
+          if (p !== 0) return false;
+        } else if (filterPriority === 'p1') {
+          if (p !== 1) return false;
+        } else if (filterPriority === 'p2') {
+          if (p !== 2) return false;
+        }
+      }
+
       // Price bucket filter
       if (filterPrice !== 'all') {
         const p = item.price;
@@ -147,7 +172,19 @@
     });
 
     // 2. Sort
-    if (sortBy === 'price-asc') {
+    if (sortBy === 'default') {
+      filtered.sort((a, b) => {
+        const ap = (a.priority !== undefined && a.priority !== null) ? a.priority : 99;
+        const bp = (b.priority !== undefined && b.priority !== null) ? b.priority : 99;
+        if (ap !== bp) return ap - bp;
+        // Same priority: newest added first
+        return new Date(b.added_at) - new Date(a.added_at);
+      });
+    } else if (sortBy === 'added-desc') {
+      filtered.sort((a, b) => new Date(b.added_at) - new Date(a.added_at));
+    } else if (sortBy === 'added-asc') {
+      filtered.sort((a, b) => new Date(a.added_at) - new Date(b.added_at));
+    } else if (sortBy === 'price-asc') {
       filtered.sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
     } else if (sortBy === 'price-desc') {
       filtered.sort((a, b) => (b.price ?? -Infinity) - (a.price ?? -Infinity));
@@ -194,6 +231,10 @@
         ? `<span class="badge badge-unavailable">Out of Stock</span>`
         : `<span class="badge badge-instock">Buyable</span>`;
 
+      const priorityBadge = (item.priority !== undefined && item.priority !== null)
+        ? `<span class="badge badge-priority badge-p${item.priority}">P${item.priority}</span>`
+        : '';
+
       const notes = item.user_notes
         ? `<div class="table-item-notes"><span class="notes-icon">📝</span> ${escapeHTML(item.user_notes)}</div>`
         : '';
@@ -207,6 +248,7 @@
           <td class="col-thumb">${img}</td>
           <td class="col-title">
             <a class="item-title-link" href="${escapeHTML(item.url)}" target="_blank" rel="noopener">${escapeHTML(item.title)}</a>
+            ${priorityBadge}
             ${notes}
             ${desc}
             <div class="table-mobile-meta">
@@ -262,6 +304,10 @@
         ? `<span class="badge badge-unavailable">Out of Stock</span>`
         : '';
 
+      const priorityBadge = (item.priority !== undefined && item.priority !== null)
+        ? `<span class="badge badge-priority badge-p${item.priority}">P${item.priority}</span>`
+        : '';
+
       const notes = item.user_notes
         ? `<p class="card-notes"><span class="notes-icon">📝</span> ${escapeHTML(item.user_notes)}</p>`
         : '';
@@ -275,7 +321,7 @@
           ${img}
           <div class="grid-card-body">
             <h3 class="card-title"><a href="${escapeHTML(item.url)}" target="_blank" rel="noopener">${escapeHTML(item.title)}</a></h3>
-            <p class="card-store"><a href="${escapeHTML(item.store_href)}">${escapeHTML(item.store)}</a> ${status}</p>
+            <p class="card-store"><a href="${escapeHTML(item.store_href)}">${escapeHTML(item.store)}</a> ${status} ${priorityBadge}</p>
             ${price}
             ${notes}
             ${desc}
@@ -309,6 +355,12 @@
   const stockSelect = toolbar.querySelector('#wishlist-stock');
   stockSelect.addEventListener('change', e => {
     filterStock = e.target.value;
+    render();
+  });
+
+  const prioritySelect = toolbar.querySelector('#wishlist-priority');
+  prioritySelect.addEventListener('change', e => {
+    filterPriority = e.target.value;
     render();
   });
 

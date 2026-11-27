@@ -313,6 +313,7 @@ type itemJSONView struct {
 	ImageURL    string   `json:"image_url,omitempty"`
 	Description string   `json:"description,omitempty"`
 	UserNotes   string   `json:"user_notes,omitempty"`
+	Priority    *int     `json:"priority,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
 	Unavailable bool     `json:"unavailable,omitempty"`
 	AddedAt     string   `json:"added_at"`
@@ -333,6 +334,7 @@ type cardView struct {
 	ImageURL    string
 	Description string
 	UserNotes   string
+	Priority    *int
 	Unavailable bool
 	Archived    bool
 }
@@ -346,6 +348,7 @@ func cardFor(item model.Item, storePaths map[string]string, base string) cardVie
 		ImageURL:    item.ImageURL,
 		Description: item.Description,
 		UserNotes:   item.UserNotes(),
+		Priority:    item.Overrides.Priority,
 		Unavailable: item.Unavailable,
 		Archived:    item.Archived,
 	}
@@ -463,6 +466,7 @@ func buildItemsJSON(items []model.Item, storePaths map[string]string, base strin
 			ImageURL:    it.ImageURL,
 			Description: it.Description,
 			UserNotes:   it.UserNotes(),
+			Priority:    it.Overrides.Priority,
 			Tags:        it.Tags,
 			Unavailable: it.Unavailable,
 			AddedAt:     it.AddedAt.Format(time.RFC3339),

@@ -627,3 +627,36 @@ h2 a {
   background: var(--accent);
   color: #ffffff;
 }
+
+/* --- Priority Badges --- */
+.badge-priority {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.25rem;
+  margin-left: 0.35rem;
+}
+
+.badge-p0 {
+  background: #dc3545;
+  color: #ffffff;
+}
+
+.badge-p1 {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.badge-p2 {
+  background: rgba(138, 75, 42, 0.18);
+  color: var(--fg);
+}
+
+.badge-p3,
+.badge-p4,
+.badge-p5 {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
