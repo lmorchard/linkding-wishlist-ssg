@@ -141,11 +141,18 @@
     }
   }
 
+  function storeInitial(store) {
+    if (!store) return '•';
+    const clean = store.replace(/^www\./i, '').trim();
+    return clean ? clean[0].toUpperCase() : '•';
+  }
+
   function renderTable(list) {
     let rows = list.map(item => {
+      const initial = storeInitial(item.store);
       const img = item.image_url 
         ? `<img class="table-thumb" src="${escapeHTML(item.image_url)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
-        : `<div class="table-thumb-placeholder"></div>`;
+        : `<div class="table-thumb-placeholder" title="${escapeHTML(item.store)}">${escapeHTML(initial)}</div>`;
       
       const price = item.price_label 
         ? `<span class="col-price-value">${escapeHTML(item.price_label)}</span>` 
@@ -210,9 +217,10 @@
 
   function renderGrid(list) {
     let cards = list.map(item => {
+      const initial = storeInitial(item.store);
       const img = item.image_url
         ? `<div class="grid-card-thumb"><img src="${escapeHTML(item.image_url)}" alt="" loading="lazy" referrerpolicy="no-referrer"></div>`
-        : `<div class="grid-card-thumb grid-card-thumb-empty"></div>`;
+        : `<div class="grid-card-thumb grid-card-thumb-empty" title="${escapeHTML(item.store)}">${escapeHTML(initial)}</div>`;
 
       const price = item.price_label
         ? `<p class="card-price">${escapeHTML(item.price_label)}</p>`
