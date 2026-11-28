@@ -255,6 +255,7 @@ type WishlistCard struct {
 	URLSource      string `json:"url_source"` // "original", "reconstructed", "unavailable"
 	Title          string `json:"title"`
 	Price          string `json:"price,omitempty"`
+	ImageURL       string `json:"image_url,omitempty"`
 	Added          string `json:"added,omitempty"`
 	WishlistItemID string `json:"wishlist_item_id"`
 	ExternalID     string `json:"external_id,omitempty"`
@@ -421,6 +422,9 @@ func (b *BrowserClient) FetchAmazonWishlistPage(ctx context.Context, listURL str
 			const priceAttr = li.getAttribute('data-price');
 			const priceEl = li.querySelector('.a-price .a-offscreen');
 
+			const imgEl = li.querySelector('img[src]');
+			const imgUrl = imgEl ? (imgEl.getAttribute('src') || '') : '';
+
 			const titleLink = li.querySelector('h2 a') || li.querySelector('a[id^="itemName_"]');
 			const href = titleLink ? titleLink.getAttribute('href') : null;
 			const asinMatch = href ? href.match(AMZ) : null;
@@ -436,6 +440,7 @@ func (b *BrowserClient) FetchAmazonWishlistPage(ctx context.Context, listURL str
 					url_source: 'original',
 					title: titleLink ? titleLink.innerText.trim() : "",
 					price: amzPrice || "",
+					image_url: imgUrl,
 					added: added,
 					wishlist_item_id: li.getAttribute('data-itemid') || ""
 				});
@@ -511,6 +516,7 @@ func (b *BrowserClient) FetchAmazonWishlistPage(ctx context.Context, listURL str
 				url_source: urlSource,
 				title: title,
 				price: price || "",
+				image_url: imgUrl,
 				added: added,
 				wishlist_item_id: li.getAttribute('data-itemid') || "",
 				external_id: externalId ? decodeURIComponent(externalId) : ""
