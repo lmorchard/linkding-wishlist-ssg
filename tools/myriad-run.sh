@@ -2,8 +2,9 @@
 # Periodic scrape and build runner for linkding-wishlist-ssg on myriad-docker.
 #
 # Runs:
-# 1. scrape: polite price/availability fetch (default 3 careful/Amazon, up to 50 normal)
-# 2. build: render static HTML into dist/ with cached local thumbnails
+# 1. sync-amazon: check for new Amazon wishlist additions and post to Linkding
+# 2. scrape: polite price/availability fetch (default 3 careful/Amazon, up to 50 normal)
+# 3. build: render static HTML into dist/ with cached local thumbnails
 set -e
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -15,6 +16,12 @@ unset LINKDING_TOKEN
 
 echo "=== Wishlist run started: $(date -u '+%Y-%m-%dT%H:%M:%SZ') ==="
 
+# 1. Incremental Amazon wishlist sync -> Linkding bookmarks
+./linkding-wishlist-ssg sync-amazon \
+  --cdp-url http://127.0.0.1:9222 \
+  --max-pages 3
+
+# 2. Scrape live prices/stock into SQLite store
 # Timebox is 15 minutes, leaving clean headroom before the next hourly cycle
 ./linkding-wishlist-ssg scrape \
   --store ./wishlist.db \
@@ -23,6 +30,7 @@ echo "=== Wishlist run started: $(date -u '+%Y-%m-%dT%H:%M:%SZ') ==="
   --careful-cap 3 \
   --normal-cap 50
 
+# 3. Build static site with thumbnails
 ./linkding-wishlist-ssg build \
   --store ./wishlist.db \
   --cache-thumbs \
