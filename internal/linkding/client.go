@@ -1,8 +1,8 @@
-// Package linkding is a trimmed copy of the Linkding REST API client used by
-// linkding-ssg. It reads bookmarks only; this tool never writes to Linkding.
+// Package linkding is a client for the Linkding REST API.
 package linkding
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -26,6 +26,22 @@ type Bookmark struct {
 	DateAdded    time.Time `json:"date_added"`
 	DateCreated  time.Time `json:"date_created"`
 	DateModified time.Time `json:"date_modified"`
+}
+
+// CreateBookmarkRequest defines the payload for creating a new bookmark via POST /api/bookmarks/.
+type CreateBookmarkRequest struct {
+	URL         string   `json:"url"`
+	Title       string   `json:"title,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Notes       string   `json:"notes,omitempty"`
+	TagNames    []string `json:"tag_names,omitempty"`
+	IsArchived  bool     `json:"is_archived,omitempty"`
+	Shared      bool     `json:"shared,omitempty"`
+}
+
+// CheckResponse represents the response from GET /api/bookmarks/check/?url=...
+type CheckResponse struct {
+	Bookmark *Bookmark `json:"bookmark"`
 }
 
 // UnmarshalJSON keeps date_added and date_created consistent, because
@@ -194,4 +210,103 @@ func (c *Client) listPage(ctx context.Context, query string, archived bool, limi
 		return nil, fmt.Errorf("decoding Linkding response: %w", err)
 	}
 	return &list, nil
+}
+
+// CheckBookmark queries Linkding's /api/bookmarks/check/?url=... endpoint to see
+// if a URL already exists as a bookmark. Returns the existing Bookmark or nil.
+func (c *Client) CheckBookmark(ctx context.Context, targetURL string) (*Bookmark, error) {
+	reqURL := c.baseURL.JoinPath("api", "bookmarks", "check")
+	reqURL.Path += "/"
+	params := reqURL.Query()
+	params.Set("url", targetURL)
+	reqURL.RawQuery = params.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating check request: %w", err)
+	}
+	req.Header.Set("Authorization", "Token "+c.token)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "linkding-wishlist-ssg/0.1")
+
+	resp, err := c.doWithRetry(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("checking bookmark %s: %w", targetURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("Linkding check API returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var check CheckResponse
+	if err := json.NewDecoder(resp.Body).Decode(&check); err != nil {
+		return nil, fmt.Errorf("decoding Linkding check response: %w", err)
+	}
+	return check.Bookmark, nil
+}
+
+// CreateBookmark creates a new bookmark via POST /api/bookmarks/.
+func (c *Client) CreateBookmark(ctx context.Context, req CreateBookmarkRequest) (*Bookmark, error) {
+	reqURL := c.baseURL.JoinPath("api", "bookmarks")
+	reqURL.Path += "/"
+
+	bodyBytes, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling create bookmark request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL.String(), bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("creating POST request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", "Token "+c.token)
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+	httpReq.Header.Set("User-Agent", "linkding-wishlist-ssg/0.1")
+
+	resp, err := c.doWithRetry(ctx, httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("posting bookmark to Linkding: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("Linkding create API returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+
+	var created Bookmark
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		return nil, fmt.Errorf("decoding created bookmark response: %w", err)
+	}
+	return &created, nil
+}
+
+func (c *Client) doWithRetry(ctx context.Context, req *http.Request) (*http.Response, error) {
+	var resp *http.Response
+	var reqErr error
+	backoffs := c.retryBackoffs
+	if backoffs == nil {
+		backoffs = defaultRetryBackoffs
+	}
+
+	for attempt := 0; attempt <= len(backoffs); attempt++ {
+		resp, reqErr = c.httpClient.Do(req)
+		if reqErr == nil && resp.StatusCode < 500 {
+			return resp, nil
+		}
+		if attempt < len(backoffs) {
+			if reqErr == nil && resp != nil {
+				resp.Body.Close()
+			}
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoffs[attempt]):
+			}
+		}
+	}
+	return nil, reqErr
 }
