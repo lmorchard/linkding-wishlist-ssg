@@ -139,3 +139,74 @@ func TestNewClientRejectsInvalidBaseURL(t *testing.T) {
 		t.Fatal("expected error for base URL without scheme")
 	}
 }
+
+func TestCheckBookmark(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/bookmarks/check/" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		target := r.URL.Query().Get("url")
+		w.Header().Set("Content-Type", "application/json")
+		if target == "https://example.com/existing" {
+			fmt.Fprint(w, `{"bookmark": {"id": 42, "url": "https://example.com/existing", "title": "Existing"}}`)
+		} else {
+			fmt.Fprint(w, `{"bookmark": null}`)
+		}
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientOptions{BaseURL: server.URL, Token: "t", HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b1, err := client.CheckBookmark(context.Background(), "https://example.com/existing")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if b1 == nil || b1.ID != 42 {
+		t.Fatalf("expected bookmark id 42, got %#v", b1)
+	}
+
+	b2, err := client.CheckBookmark(context.Background(), "https://example.com/new")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if b2 != nil {
+		t.Fatalf("expected nil bookmark, got %#v", b2)
+	}
+}
+
+func TestCreateBookmark(t *testing.T) {
+	var posted CreateBookmarkRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/bookmarks/" || r.Method != http.MethodPost {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Token t" {
+			t.Errorf("unexpected auth header: %s", r.Header.Get("Authorization"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprint(w, `{"id": 101, "url": "https://example.com/item", "title": "New Item", "tag_names": ["wishlist", "amazon"]}`)
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientOptions{BaseURL: server.URL, Token: "t", HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	posted = CreateBookmarkRequest{
+		URL:      "https://example.com/item",
+		Title:    "New Item",
+		TagNames: []string{"wishlist", "amazon"},
+	}
+	created, err := client.CreateBookmark(context.Background(), posted)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if created == nil || created.ID != 101 || created.Title != "New Item" {
+		t.Fatalf("unexpected created bookmark: %#v", created)
+	}
+}
